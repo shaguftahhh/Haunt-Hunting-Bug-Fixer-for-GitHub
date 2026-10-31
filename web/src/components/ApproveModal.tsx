@@ -49,7 +49,11 @@ export function ApproveModal({
 
   useEffect(() => {
     previousFocus.current = document.activeElement;
-    confirmRef.current?.focus();
+    // Focus the confirm action when it is available; otherwise focus the
+    // dialog itself (the real-write button is disabled until the checkbox).
+    const confirm = confirmRef.current;
+    if (confirm && !confirm.disabled) confirm.focus();
+    else dialogRef.current?.focus();
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
@@ -123,6 +127,7 @@ export function ApproveModal({
         aria-labelledby="approve-modal-title"
         aria-describedby="approve-modal-summary"
         ref={dialogRef}
+        tabIndex={-1}
       >
         <div className="modal__head">
           <div>

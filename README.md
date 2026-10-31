@@ -312,7 +312,9 @@ bugbanisher/
 | `GET` | `/api/fix/:jobId` | Patch job progress + result. |
 | `POST` | `/api/approve` | The only write path (requires `confirm: true`). |
 | `GET` | `/api/history` | Approvals this session. |
-| `GET` | `/api/demo` | Bundled sample scan (offline). |
+| `POST` | `/api/demo` | Load the bundled sample scan (offline). |
+| `POST` | `/api/settings/dry-run` | Toggle dry-run for this session. |
+| `POST` | `/api/auth/logout` | Forget the token and session scans. |
 
 ---
 

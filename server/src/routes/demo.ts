@@ -12,7 +12,7 @@ import { buildDemoBundle } from '../demo/loader.js';
 
 export const demoRouter = Router();
 
-demoRouter.get(
+demoRouter.post(
   '/demo',
   asyncHandler(async (req, res) => {
     const session = getSession(req);

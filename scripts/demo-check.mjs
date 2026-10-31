@@ -36,7 +36,7 @@ async function api(pathname, init = {}) {
 }
 
 console.log(`BugBanisher Demo Mode check against ${base}\n`);
-const { scan } = await api('/demo');
+const { scan } = await api('/demo', { method: 'POST', body: '{}' });
 console.log(`${scan.repo.fullName} · ${scan.findings.length} findings · model: ${scan.stats.modelUsed}\n`);
 for (const finding of scan.findings) {
   console.log(

@@ -131,7 +131,7 @@ export const api = {
       repo: RepoSummary;
       scan: ScanResult;
       fixes: Record<string, FixResult | { error: string; finding: Finding }>;
-    }>('/demo'),
+    }>('/demo', { method: 'POST', body: JSON.stringify({}) }),
 };
 
 export type { Finding, FixResult, GitHubUser, PullRequestRecord, RepoSummary, ScanResult, SessionView };
