@@ -1,4 +1,4 @@
-# 👻 BugBanisher
+# BugBanisher
 
 > **Banish bugs. Keep the humans in charge.**
 > A spooky, beginner-friendly "AI for open source" tool that finds bugs in **one** of your GitHub
