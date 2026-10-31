@@ -430,7 +430,12 @@
   flex: 1;
 }
 
+.repo-card__main {
+  display: block;
+}
+
 .repo-card__name {
+  display: block;
   font-weight: 700;
   font-size: 0.98rem;
   overflow: hidden;
@@ -439,6 +444,7 @@
 }
 
 .repo-card__desc {
+  display: block;
   font-size: 0.82rem;
   color: var(--text-muted);
   overflow: hidden;
@@ -782,6 +788,14 @@
   font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.5;
+}
+
+.diff-table--unified .diff-code {
+  width: auto;
+}
+
+.diff-table--unified td:last-child {
+  width: 100%;
 }
 
 .diff-table th {

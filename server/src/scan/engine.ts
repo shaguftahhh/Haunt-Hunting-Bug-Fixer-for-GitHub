@@ -227,7 +227,8 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
   }
 
   ctx.step('Running static checks');
-  const linters = detectLinters(paths);
+  // Only consider config files inside the files we actually scanned.
+  const linters = detectLinters(candidates);
   const findings: Finding[] = [];
 
   for (const file of files) {

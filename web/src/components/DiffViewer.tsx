@@ -232,7 +232,7 @@ export function DiffViewer({ diff, redacted }: DiffViewerProps) {
             </tbody>
           </table>
         ) : (
-          <table className="diff-table">
+          <table className="diff-table diff-table--unified">
             <caption className="sr-only">Unified diff</caption>
             <thead>
               <tr>

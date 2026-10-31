@@ -23,6 +23,8 @@ import { demoRouter } from './routes/demo.js';
 
 const app = express();
 
+// Respect X-Forwarded-* when deployed behind a proxy (OAuth redirect URLs).
+app.set('trust proxy', 1);
 app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());

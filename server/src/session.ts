@@ -20,6 +20,7 @@ import { config, publicRuntimeInfo } from './config.js';
 const SESSION_COOKIE = 'bb_sid';
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_SCANS_PER_SESSION = 2;
+const MAX_SESSIONS = 500;
 
 export interface SessionData {
   id: string;
@@ -76,6 +77,12 @@ export function sessionMiddleware(req: Request, res: Response, next: NextFunctio
   let session = typeof raw === 'string' ? sessions.get(raw) : undefined;
 
   if (!session) {
+    // Bound memory for long-running demos: evict the least recently seen
+    // anonymous sessions before adding another one.
+    if (sessions.size >= MAX_SESSIONS) {
+      const oldest = [...sessions.values()].sort((a, b) => a.lastSeen - b.lastSeen).slice(0, 50);
+      for (const stale of oldest) sessions.delete(stale.id);
+    }
     session = newSession();
     sessions.set(session.id, session);
     res.cookie(SESSION_COOKIE, session.id, {
