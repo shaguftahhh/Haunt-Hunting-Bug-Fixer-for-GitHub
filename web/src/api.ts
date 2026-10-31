@@ -1,0 +1,137 @@
+/**
+ * Typed client for the BugBanisher API.
+ *
+ * Every call is same-origin (`/api/...`) and carries the session cookie, so
+ * the browser never sees a GitHub token. Errors are normalised into ApiError
+ * with a human-readable message + optional hint from the server.
+ */
+import type {
+  Finding,
+  FixResult,
+  GitHubUser,
+  JobView,
+  PullRequestRecord,
+  RepoSummary,
+  ScanResult,
+  SessionView,
+} from './types';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly hint?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+interface ApiErrorBody {
+  error?: string;
+  hint?: string;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(init?.headers ?? {}),
+      },
+      ...init,
+    });
+  } catch {
+    throw new ApiError('Could not reach the BugBanisher server.', 0, 'Is `npm run dev` still running?');
+  }
+
+  if (!res.ok) {
+    let body: ApiErrorBody = {};
+    try {
+      body = (await res.json()) as ApiErrorBody;
+    } catch {
+      /* not JSON */
+    }
+    throw new ApiError(body.error ?? `Request failed (${res.status})`, res.status, body.hint);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+export interface SessionResponse extends SessionView {}
+
+export interface ReposResponse {
+  login: string;
+  repos: RepoSummary[];
+  note: string;
+}
+
+export interface ConnectResponse extends SessionView {
+  warnings?: string[];
+}
+
+export interface ScanJob extends JobView<ScanResult> {}
+export interface FixJob extends JobView<FixResult> {}
+
+export const api = {
+  session: () => request<SessionResponse>('/session'),
+
+  connectWithToken: (token: string) =>
+    request<ConnectResponse>('/auth/pat', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  disconnect: () => request<SessionView>('/auth/logout', { method: 'POST' }),
+
+  repos: () => request<ReposResponse>('/repos'),
+
+  setDryRun: (dryRun: boolean) =>
+    request<SessionView>('/settings/dry-run', {
+      method: 'POST',
+      body: JSON.stringify({ dryRun }),
+    }),
+
+  startScan: (repoFullName: string) =>
+    request<{ jobId: string }>('/scan', {
+      method: 'POST',
+      body: JSON.stringify({ repoFullName }),
+    }),
+
+  scanStatus: (jobId: string) => request<ScanJob>(`/scan/${encodeURIComponent(jobId)}`),
+
+  getScan: (scanId: string) => request<ScanResult>(`/scan/result/${encodeURIComponent(scanId)}`),
+
+  startFix: (scanId: string, findingId: string) =>
+    request<{ jobId: string }>('/fix', {
+      method: 'POST',
+      body: JSON.stringify({ scanId, findingId }),
+    }),
+
+  fixStatus: (jobId: string) => request<FixJob>(`/fix/${encodeURIComponent(jobId)}`),
+
+  getFix: (fixId: string) => request<FixResult>(`/fix/result/${encodeURIComponent(fixId)}`),
+
+  approve: (fixId: string) =>
+    request<{
+      record: PullRequestRecord;
+      session: SessionView;
+      labelApplied: boolean;
+      note: string;
+    }>('/approve', {
+      method: 'POST',
+      body: JSON.stringify({ fixId, confirm: true }),
+    }),
+
+  history: () =>
+    request<{ history: PullRequestRecord[]; approvals: number; cap: number }>('/history'),
+
+  demo: () =>
+    request<{
+      repo: RepoSummary;
+      scan: ScanResult;
+      fixes: Record<string, FixResult | { error: string; finding: Finding }>;
+    }>('/demo', { method: 'POST', body: JSON.stringify({}) }),
+};
+
+export type { Finding, FixResult, GitHubUser, PullRequestRecord, RepoSummary, ScanResult, SessionView };

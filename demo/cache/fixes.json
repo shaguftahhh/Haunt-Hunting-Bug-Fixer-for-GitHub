@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "model": "gemma3:4b",
+  "note": "Cached minimal patches for Demo Mode. Each diff is verified at load time.",
+  "fixes": {
+    "static-js/off-by-one-src/pagination.js-7": {
+      "summary": "Changed the loop condition from <= to < so the loop stops at the last valid index. The total now includes every order and never reads undefined.",
+      "testPlan": "1. Call totalValue([{ price: 10 }, { price: 5 }]) and expect 15.\n2. Call totalValue([]) and expect 0.\n3. Run the project’s tests or the checkout flow that used to return NaN.",
+      "prTitle": "fix: stop reading past the end of the orders array",
+      "diff": "--- a/src/pagination.js\n+++ b/src/pagination.js\n@@ -4,7 +4,7 @@\n \n function totalValue(orders) {\n   let total = 0;\n-  for (let i = 0; i <= orders.length; i += 1) {\n+  for (let i = 0; i < orders.length; i += 1) {\n     total += orders[i].price;\n   }\n   return total;\n"
+    },
+    "static-js/innerhtml-src/render.js-10": {
+      "summary": "Replaced the innerHTML string with DOM nodes and textContent, so recipient names are always treated as text and can never inject markup.",
+      "testPlan": "1. Render a recipient named <img src=x onerror=alert(1)>.\n2. Confirm the dashboard shows that text literally and no alert fires.\n3. Confirm normal names still render as list items.",
+      "prTitle": "fix: render recipient names as text instead of HTML",
+      "diff": "--- a/src/render.js\n+++ b/src/render.js\n@@ -3,11 +3,13 @@\n  */\n \n function renderRecipients(listElement, recipients) {\n-  let html = '';\n+  listElement.textContent = '';\n   for (const recipient of recipients) {\n-    html += '<li class=\"recipient\">' + recipient.name + '</li>';\n+    const item = document.createElement('li');\n+    item.className = 'recipient';\n+    item.textContent = recipient.name;\n+    listElement.appendChild(item);\n   }\n-  listElement.innerHTML = html;\n }\n \n module.exports = { renderRecipients };\n"
+    },
+    "static-js/json-parse-src/api.js-8": {
+      "summary": "Wrapped JSON.parse in a try/catch and returned a 400 with a JSON error for malformed bodies, so bad input no longer becomes an unhandled exception.",
+      "testPlan": "1. POST a body of \"not json\" to the webhook and expect 400 with {\"error\":\"Invalid JSON body\"}.\n2. POST a valid orders payload and confirm the total is still returned.\n3. Run the existing tests.",
+      "prTitle": "fix: return 400 for malformed webhook JSON",
+      "diff": "--- a/src/api.js\n+++ b/src/api.js\n@@ -5,7 +5,15 @@\n const { totalValue } = require('./pagination');\n \n async function handleWebhook(req, res) {\n-  const payload = JSON.parse(req.body);\n+  let payload;\n+  try {\n+    payload = JSON.parse(req.body);\n+  } catch {\n+    res.writeHead(400, { 'Content-Type': 'application/json' });\n+    res.end(JSON.stringify({ error: 'Invalid JSON body' }));\n+    return;\n+  }\n+\n   const total = totalValue(payload.orders);\n   res.writeHead(200, { 'Content-Type': 'application/json' });\n   res.end(JSON.stringify({ total }));\n"
+    }
+  }
+}

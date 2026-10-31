@@ -1,0 +1,9 @@
+{
+  "env": { "node": true, "es2021": true },
+  "parserOptions": { "ecmaVersion": 2021 },
+  "rules": {
+    "eqeqeq": "error",
+    "no-eval": "error",
+    "no-unsafe-innerhtml/no-unsafe-innerhtml": "error"
+  }
+}

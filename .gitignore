@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+build/
+web/dist/
+server/dist/
+*.tsbuildinfo
+
+# Environment & secrets (NEVER commit a real .env)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+secrets/
+credentials.json
+.npmrc
+.netrc
+
+# Local logs / OS noise
+*.log
+npm-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Test & tool caches
+coverage/
+.nyc_output/
+.next/
+.cache/
+.vite/
+*.local
+
+# Editor files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# Scratch space
+tmp/
+.tmp/

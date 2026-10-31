@@ -1,0 +1,28 @@
+{
+  "name": "bugbanisher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A spooky, human-in-the-loop bug fixer for GitHub. Finds bugs, explains them, and opens a pull request only after you approve.",
+  "license": "MIT",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c red,magenta \"npm run dev -w server\" \"npm run dev -w web\"",
+    "build": "npm run build -w web && npm run build -w server",
+    "start": "node server/dist/index.js",
+    "serve": "npm run build && npm start",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "test": "npm test -w server && npm test -w web",
+    "demo:cache": "tsx scripts/build-demo-cache.mts",
+    "scan:sample": "tsx scripts/scan-sample.mts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

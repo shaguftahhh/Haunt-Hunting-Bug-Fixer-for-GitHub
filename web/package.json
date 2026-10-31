@@ -1,0 +1,28 @@
+{
+  "name": "bugbanisher-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BugBanisher frontend: a spooky, accessible human-in-the-loop bug board.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "test": "tsx --test test/*.test.tsx"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.14",
+    "tsx": "^4.19.2",
+    "@types/node": "^22.10.7"
+  }
+}

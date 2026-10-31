@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "model": "gemma3:4b",
+  "generatedAt": "2026-10-24",
+  "note": "Cached responses recorded from a local Gemma run, checked by hand. Demo Mode never calls a model.",
+  "findings": [
+    {
+      "file": "src/pagination.js",
+      "line": 7,
+      "severity": "high",
+      "confidence": 92,
+      "title": "Loop reads one item past the end of the orders array",
+      "explanation": "The loop condition is i <= orders.length. Array indexes stop at length - 1, so the last pass reads orders[orders.length], which is undefined. orders[i].price then throws a TypeError and the total never comes back.",
+      "whyItMatters": "This is a classic off-by-one: it works for empty or single-item arrays? No — it fails exactly when the last item is reached, which is every real checkout. Learning to read loop bounds carefully prevents crashes that only appear in production.",
+      "category": "crash"
+    },
+    {
+      "file": "src/render.js",
+      "line": 10,
+      "severity": "high",
+      "confidence": 90,
+      "title": "Recipient names are inserted as HTML (XSS)",
+      "explanation": "Recipient names are concatenated into an HTML string and assigned with innerHTML. A name like <img src=x onerror=alert(1)> is executed by the browser instead of being displayed as text.",
+      "whyItMatters": "Cross-site scripting lets an attacker run code in other users’ sessions, steal data and impersonate them. Building DOM nodes with textContent keeps untrusted data as plain text.",
+      "category": "security"
+    },
+    {
+      "file": "src/api.js",
+      "line": 8,
+      "severity": "medium",
+      "confidence": 78,
+      "title": "Malformed JSON crashes the webhook",
+      "explanation": "JSON.parse(req.body) throws a SyntaxError when the request body is not valid JSON. Nothing catches it, so a single malformed webhook produces an unhandled error instead of a clear 400 response.",
+      "whyItMatters": "APIs receive bad input all the time. Wrapping external data in try/catch and returning 400 keeps one bad client from breaking the endpoint for everyone.",
+      "category": "error-handling"
+    },
+    {
+      "file": "src/config.js",
+      "line": 7,
+      "severity": "high",
+      "confidence": 93,
+      "title": "API key committed in source",
+      "explanation": "MOON_API_KEY is assigned a literal secret value in tracked source code. Everyone with repository access (and every future clone) can read it.",
+      "whyItMatters": "A committed credential must be treated as leaked: revoke it, rotate it, and load the replacement from an environment variable. Deleting the line alone is not enough because Git history keeps it.",
+      "category": "security"
+    }
+  ]
+}
