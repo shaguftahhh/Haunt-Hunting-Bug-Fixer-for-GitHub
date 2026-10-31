@@ -63,7 +63,7 @@ cp .env.example .env        # the defaults already work for Demo Mode
 npm run dev                 # API on :8787, web app on :5173
 ```
 
-Open **http://localhost:5173**.
+Open 
 https://haunt-hunting-bug-fixer-for-github-brown.vercel.app
 
 The two dev servers run together (`concurrently`). Vite proxies `/api` to the Express server, so the
