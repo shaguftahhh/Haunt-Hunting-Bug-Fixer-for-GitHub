@@ -14,6 +14,7 @@ import crypto from 'node:crypto';
 import { config } from '../config.js';
 import type { Finding, RepoFile, RepoSummary, ScanResult, Severity } from '../types.js';
 import { runScan } from '../scan/engine.js';
+import { mechanicalFix } from '../patch/mechanical.js';
 import type { JobContext } from '../jobs.js';
 import { redactSecrets } from '../redaction.js';
 
@@ -181,6 +182,15 @@ export async function buildDemoBundle(): Promise<DemoBundle> {
     });
   }
 
+  // Keep the "fixable now" flags accurate after cached findings are merged in.
+  for (const finding of merged) {
+    const file = files.find((candidate) => candidate.path === finding.file);
+    finding.autoFixAvailable =
+      finding.source !== 'issue' && finding.line > 0 && file
+        ? mechanicalFix(finding, file.content) !== null
+        : false;
+  }
+
   const notes = [
     'Demo Mode: bundled sample repo and cached model responses. No network calls were made.',
     'Nothing in Demo Mode is ever written to GitHub.',
@@ -198,6 +208,8 @@ export async function buildDemoBundle(): Promise<DemoBundle> {
         ...scan.stats,
         issuesRead: cache.issues.issues.length,
         modelUsed: `${cache.findings.model} (cached)`,
+        modelAvailable: true,
+        autoFixableCount: merged.filter((finding) => finding.autoFixAvailable).length,
       },
       notes,
       createdAt: new Date().toISOString(),

@@ -14,6 +14,8 @@ import { getSession, storeFix } from '../session.js';
 import { generateFix } from '../patch/generate.js';
 import { getFileWithSha } from '../github/client.js';
 import { cachedFixFor, cachedModelName } from '../demo/loader.js';
+import { getLLMProvider } from '../llm/index.js';
+import { getRememberedDemoFix, getRememberedDemoScan, rememberDemoFix } from '../demo/store.js';
 import type { FixResult, JobView } from '../types.js';
 
 export const fixRouter = Router();
@@ -33,7 +35,7 @@ fixRouter.post(
     const scanId = typeof body.scanId === 'string' ? body.scanId : '';
     const findingId = typeof body.findingId === 'string' ? body.findingId : '';
 
-    const record = session.scans.get(scanId);
+    const record = session.scans.get(scanId) ?? getRememberedDemoScan(scanId) ?? undefined;
     if (!record) {
       throw new HttpError(
         404,
@@ -110,6 +112,7 @@ fixRouter.post(
       );
 
       storeFix(session, fixRecord);
+      if (record.scan.mode === 'demo') rememberDemoFix(fixRecord);
       return fixRecord.fix;
     });
 
@@ -141,7 +144,7 @@ fixRouter.get(
   '/fix/result/:fixId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    const record = session.fixes.get(req.params.fixId ?? '');
+    const record = session.fixes.get(req.params.fixId ?? '') ?? getRememberedDemoFix(req.params.fixId ?? '');
     if (!record) {
       throw new HttpError(
         404,

@@ -51,6 +51,9 @@ const LANGUAGE_BY_EXT: Record<string, string> = {
   '.sh': 'shell',
 };
 
+/** Human-readable list used by empty-state guidance in the UI. */
+export const SUPPORTED_EXTENSIONS = [...CODE_EXTENSIONS].join(', ');
+
 export function languageOf(path: string): string {
   const dot = path.lastIndexOf('.');
   if (dot === -1) return 'text';
@@ -67,6 +70,9 @@ const SKIP_PATH_PATTERNS: Array<[RegExp, string]> = [
   [/\.min\.(js|css)$/i, 'minified bundle'],
   [/\.(map|snap)$/i, 'generated file'],
   [/(^|\/)test(s)?\/fixtures\//i, 'test fixtures'],
+  // BugBanisher ships a deliberately buggy sample repo for Demo Mode; when
+  // someone scans this project, those planted bugs are not real findings.
+  [/(^|\/)demo\/(sample-repo|cache)\//i, 'bundled demo fixture'],
 ];
 
 /** Names that suggest credentials. We refuse to read these, period. */
@@ -97,12 +103,14 @@ export type SkipReason =
   | 'key material'
   | 'possible secret content'
   | 'binary/unsupported'
+  | 'no file extension'
   | 'vendored dependencies'
   | 'build output'
   | 'lockfile'
   | 'minified bundle'
   | 'generated file'
   | 'test fixtures'
+  | 'bundled demo fixture'
   | 'git internals'
   | 'credential file'
   | 'env file'
@@ -131,7 +139,10 @@ export function classifyPath(path: string, size = 0, maxBytes = 60_000): FilterD
     if (pattern.test(path)) return { keep: false, reason: reason as SkipReason };
   }
 
-  const ext = lower.slice(lower.lastIndexOf('.'));
+  const dot = lower.lastIndexOf('.');
+  const slash = lower.lastIndexOf('/');
+  if (dot <= slash) return { keep: false, reason: 'no file extension' };
+  const ext = lower.slice(dot);
   if (!CODE_EXTENSIONS.has(ext)) return { keep: false, reason: 'binary/unsupported' };
 
   if (size === 0) return { keep: false, reason: 'empty file' };

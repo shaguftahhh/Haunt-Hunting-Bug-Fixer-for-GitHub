@@ -30,6 +30,7 @@ import { checkLLMProvider, getLLMProvider } from '../llm/index.js';
 import { reviewFilesWithLLM } from '../llm/findings.js';
 import { classifyPath, languageOf, looksLikeSecretContent, isProbablyBinary } from './fileFilter.js';
 import { runStaticRules } from './staticRules.js';
+import { mechanicalFix } from '../patch/mechanical.js';
 import { detectLinters, runRuff, runSyntaxChecks } from './linters.js';
 
 const SEVERITY_WEIGHT: Record<Severity, number> = { high: 3, medium: 2, low: 1 };
@@ -227,8 +228,9 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
   }
 
   ctx.step('Running static checks');
-  // Only consider config files inside the files we actually scanned.
-  const linters = detectLinters(candidates);
+  // Config files (package.json, tsconfig.json, .eslintrc…) are not source files,
+  // but their presence is what tells the user which linters the repo uses.
+  const linters = detectLinters(paths);
   const findings: Finding[] = [];
 
   for (const file of files) {
@@ -247,6 +249,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
         ruleId: match.ruleId,
         snippet,
         snippetStart,
+        fixHint: match.fixHint,
       });
     }
   }
@@ -372,6 +375,16 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     })
     .slice(0, MAX_FINDINGS);
 
+  // Tell the UI which findings a deterministic patch can fix right now.
+  for (const finding of finalFindings) {
+    const file = files.find((candidate) => candidate.path === finding.file);
+    if (file && finding.line > 0 && finding.source !== 'issue') {
+      finding.autoFixAvailable = mechanicalFix(finding, file.content) !== null;
+    } else {
+      finding.autoFixAvailable = false;
+    }
+  }
+
   const stats: ScanStats = {
     filesInRepo: paths.length,
     filesScanned: files.length,
@@ -382,6 +395,8 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     ),
     issuesRead,
     modelUsed,
+    modelAvailable: Boolean(modelUsed),
+    autoFixableCount: finalFindings.filter((finding) => finding.autoFixAvailable).length,
     durationMs: Date.now() - started,
   };
 

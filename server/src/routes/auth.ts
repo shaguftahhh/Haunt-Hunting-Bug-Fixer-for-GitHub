@@ -175,11 +175,15 @@ authRouter.get(
   '/repos',
   asyncHandler(async (req, res) => {
     const { token, login } = requireAuth(req);
-    const repos = await listOwnedRepos(token, login);
+    const includeWritable = req.query.includeWritable === '1';
+    const repos = await listOwnedRepos(token, login, { includeWritable });
     res.json({
       login,
       repos,
-      note: 'Only repositories owned by you (or explicitly included in your fine-grained token) are listed.',
+      includeWritable,
+      note: includeWritable
+        ? 'Your repositories plus repositories you have write access to. You still choose exactly one.'
+        : 'Only repositories owned by you are listed.',
     });
   }),
 );

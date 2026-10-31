@@ -50,6 +50,8 @@ const scan: ScanResult = {
       explanation: 'The loop uses <= .length.',
       whyItMatters: 'It reads undefined and crashes checkout.',
       ruleId: 'js/off-by-one',
+      fixHint: 'Change <= .length to < .length so the loop stops at the last index.',
+      autoFixAvailable: true,
       snippet: 'function totalValue(orders) {\n  let total = 0;\n  for (let i = 0; i <= orders.length; i += 1) {\n    total += orders[i].price;',
       snippetStart: 5,
     },
@@ -74,6 +76,8 @@ const scan: ScanResult = {
     lintersDetected: ['ESLint (.eslintrc.json)'],
     issuesRead: 1,
     modelUsed: 'gemma3:4b (cached)',
+    modelAvailable: true,
+    autoFixableCount: 1,
     durationMs: 120,
   },
   notes: ['Demo Mode: bundled sample repo.'],
@@ -167,6 +171,8 @@ test('Bug Board renders findings, issue findings, snippets and the demo banner s
   assert.match(html, /banished/);
   assert.match(html, /issue #42/);
   assert.match(html, /Why it matters/);
+  assert.match(html, /How to fix:/);
+  assert.match(html, /Quick fix/);
   assert.match(html, /Exit demo/);
   // Demo scans must never render a GitHub code link.
   assert.ok(!html.includes('/blob/main'), 'demo findings must not link to GitHub');
@@ -177,6 +183,8 @@ test('the fix panel renders the verification checklist and the diff', () => {
     <FixPanel
       scan={scan}
       finding={fix.finding}
+      model={null}
+      onCheckModel={noop}
       dryRun
       approvals={0}
       approvalCap={3}
@@ -184,8 +192,11 @@ test('the fix panel renders the verification checklist and the diff', () => {
       onApprove={noop}
     />,
   );
-  assert.match(html, /Drafting a minimal patch/);
-  assert.match(html, /Locating the file/);
+  // Server-rendered React runs the initial state: the job starts on mount.
+  assert.match(html, /Fix preview/);
+  assert.match(html, /How to fix:/);
+  assert.match(html, /Why it matters/);
+  assert.match(html, /Back to board/);
 });
 
 test('Approval dialog shows branch, title, PR body and the dry-run warning', () => {
@@ -242,13 +253,22 @@ test('Scan panel renders the read-only warning and the no-model warning', () => 
     <ScanPanel
       repo={repo}
       dryRun
-      llm={{ provider: 'none', model: null }}
+      model={{
+        provider: 'ollama',
+        model: 'gemma3:4b',
+        ok: false,
+        detail: 'No model server answered at http://localhost:11434.',
+        setup: ['ollama serve'],
+      }}
+      modelLoading={false}
+      onCheckModel={noop}
       onBack={noop}
       onScanned={noop}
     />,
   );
   assert.match(html, /Read-only scan/);
-  assert.match(html, /No model configured/);
+  assert.match(html, /AI model not reachable/);
+  assert.match(html, /Quick fix/);
   assert.match(html, /Scan for bugs/);
 });
 

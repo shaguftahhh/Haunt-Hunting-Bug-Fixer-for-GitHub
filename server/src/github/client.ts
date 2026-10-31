@@ -130,6 +130,7 @@ function toRepoSummary(repo: {
   updated_at: string | null;
   html_url: string;
   owner: { login: string };
+  permissions?: { push?: boolean; admin?: boolean };
 }): RepoSummary {
   return {
     owner: repo.owner.login,
@@ -144,31 +145,48 @@ function toRepoSummary(repo: {
     stars: repo.stargazers_count,
     updatedAt: repo.updated_at,
     htmlUrl: repo.html_url,
+    pushAccess: Boolean(repo.permissions?.push || repo.permissions?.admin),
   };
 }
 
 /**
- * List repos the signed-in user owns. We deliberately request `affiliation=owner`
- * and then double-check `owner.login === user.login`, so a token that can see
- * organisation repos still never shows repos the user does not own unless they
- * explicitly grant access to them (fine-grained PAT selection).
+ * List repositories the user may work on.
+ *
+ * - Always: repositories the user owns.
+ * - With `includeWritable`: also repositories where the user has push access
+ *   (organisation repos, or repos a fine-grained token was explicitly scoped to).
+ *
+ * Even in the wider mode the user still has to *select* one repository in the
+ * picker, which is exactly the "owned or explicitly selected" rule in the spec.
+ * Everything is re-checked server-side before a scan or a write.
  */
-export async function listOwnedRepos(token: string, login: string): Promise<RepoSummary[]> {
+export async function listOwnedRepos(
+  token: string,
+  login: string,
+  options: { includeWritable?: boolean } = {},
+): Promise<RepoSummary[]> {
   const repos: RepoSummary[] = [];
+  const seen = new Set<string>();
+  const affiliation = options.includeWritable ? 'owner,organization_member,collaborator' : 'owner';
+
   for (let page = 1; page <= 3; page += 1) {
-    const { data } = await githubRequest<
-      Array<Parameters<typeof toRepoSummary>[0] & { permissions?: { push?: boolean } }>
-    >(
-      `/user/repos?affiliation=owner&sort=updated&per_page=100&page=${page}`,
+    const { data } = await githubRequest<Array<Parameters<typeof toRepoSummary>[0]>>(
+      `/user/repos?affiliation=${affiliation}&sort=updated&per_page=100&page=${page}`,
       { token },
     );
     for (const repo of data) {
-      if (repo.owner.login.toLowerCase() !== login.toLowerCase()) continue;
+      const summary = toRepoSummary(repo);
+      if (seen.has(summary.fullName.toLowerCase())) continue;
+      const owns = repo.owner.login.toLowerCase() === login.toLowerCase();
+      if (!owns && !options.includeWritable) continue;
+      if (!owns && !summary.pushAccess) continue; // never show read-only repos
       if (repo.archived) continue;
-      repos.push(toRepoSummary(repo));
+      seen.add(summary.fullName.toLowerCase());
+      repos.push(summary);
     }
     if (data.length < 100) break;
   }
+
   return repos;
 }
 

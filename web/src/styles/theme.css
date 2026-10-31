@@ -13,10 +13,10 @@
   --ink-700: #1d1729;
   --ink-600: #2a2238;
 
-  /* Text */
-  --text: #f4f1f7;
-  --text-muted: #b8b1c7;
-  --text-dim: #8f88a0;
+  /* Text — checked for >= 4.5:1 on the panel background */
+  --text: #fbf9fe;
+  --text-muted: #d2ccdd;
+  --text-dim: #b0a8c2;
 
   /* Accents */
   --blood: #ff4d5e;
@@ -45,11 +45,13 @@
   --glow-ghost: 0 0 0 1px rgba(126, 247, 181, 0.35), 0 8px 30px -14px rgba(126, 247, 181, 0.45);
   --shadow-panel: 0 18px 50px -24px rgba(0, 0, 0, 0.9);
 
-  /* Type */
-  --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+  /* Type — system UI fonts are the clearest thing available offline, with no
+     webfont download and no flash of invisible text. */
+  --font-body: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans',
     sans-serif;
-  --font-display: 'Trebuchet MS', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-body);
   --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --text-base: 17px;
 
   /* Layout */
   --radius-sm: 6px;
@@ -80,8 +82,9 @@ body {
   background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 16px;
-  line-height: 1.6;
+  font-size: var(--text-base);
+  line-height: 1.65;
+  letter-spacing: 0.005em;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -102,9 +105,11 @@ h2,
 h3,
 h4 {
   font-family: var(--font-display);
-  line-height: 1.2;
+  line-height: 1.25;
   margin: 0 0 0.5rem;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  font-weight: 800;
+  text-wrap: balance;
 }
 
 p {
@@ -125,7 +130,13 @@ code,
 kbd,
 pre {
   font-family: var(--font-mono);
-  font-size: 0.875em;
+  font-size: 0.9em;
+  font-feature-settings: 'liga' 0;
+}
+
+p,
+li {
+  text-wrap: pretty;
 }
 
 ::selection {
@@ -195,11 +206,13 @@ pre {
 }
 
 .small {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
 .tiny {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
 }
 
 .mono {
@@ -253,10 +266,11 @@ pre {
 
 .eyebrow {
   text-transform: uppercase;
-  letter-spacing: 0.14em;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--pumpkin);
+  letter-spacing: 0.13em;
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #ffb066;
+  margin-bottom: 0.35rem;
 }
 
 .divider {
@@ -268,6 +282,7 @@ pre {
 /* ------------------------------------------------------------------ buttons */
 
 .btn {
+  min-height: 44px;
   --btn-bg: var(--ink-700);
   --btn-fg: var(--text);
   --btn-border: var(--border-strong);
@@ -281,9 +296,9 @@ pre {
   background: var(--btn-bg);
   color: var(--btn-fg);
   font: inherit;
-  font-weight: 650;
-  font-size: 0.95rem;
-  line-height: 1.1;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.15;
   cursor: pointer;
   text-decoration: none;
   transition:
@@ -328,8 +343,9 @@ pre {
 }
 
 .btn--small {
-  padding: 0.45rem 0.8rem;
-  font-size: 0.85rem;
+  min-height: 38px;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.9rem;
   border-radius: var(--radius-sm);
 }
 
@@ -355,13 +371,14 @@ pre {
 .textarea,
 .select {
   width: 100%;
+  min-height: 46px;
   padding: 0.75rem 0.9rem;
   border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   background: rgba(7, 5, 10, 0.7);
   color: var(--text);
   font: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 .input::placeholder,
@@ -384,9 +401,10 @@ pre {
 }
 
 .help {
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   color: var(--text-muted);
-  margin-top: 0.35rem;
+  margin-top: 0.4rem;
+  line-height: 1.55;
 }
 
 /* ------------------------------------------------------------------ badges */
@@ -395,12 +413,12 @@ pre {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.18rem 0.55rem;
+  padding: 0.22rem 0.6rem;
   border-radius: 999px;
   border: 1px solid var(--border-strong);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   white-space: nowrap;
 }

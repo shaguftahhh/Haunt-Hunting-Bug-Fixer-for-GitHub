@@ -32,8 +32,9 @@ It is deliberately narrow:
 1. **Connect GitHub** with a fine-grained personal access token (recommended) or an OAuth app.
    The exact permissions used are listed in the UI: *Contents: read/write*, *Pull requests:
    read/write*. Nothing else.
-2. **Pick a repository.** Only repositories you own (or explicitly included in your fine-grained
-   token) are listed. There is no free-text repo field.
+2. **Pick a repository.** You see repositories you own, plus (with one toggle) repositories you have
+   write access to, such as organisation repos or repos your token was scoped to. There is no
+   free-text repo field, and access is re-checked server-side before every scan and write.
 3. **Scan.** The server reads the repo through the GitHub API, filters out secrets and binaries, runs
    static checks and safe syntax parsers, reads open issues labelled `bug`, and asks the local model
    to review the most suspicious files.
@@ -224,6 +225,10 @@ See [SECURITY notes](#privacy--security) below for the session model.
 Because BugBanisher reads repositories through the GitHub API (it does not clone and run your
 `npm install`), it combines:
 
+- **A small lexer** (`server/src/scan/lexer.ts`) so rules only fire on real code — not on commented-out
+  lines, multi-line template literals, regex literals or Python docstrings. `// eslint-disable-next-line`,
+  `// bugbanisher:ignore` and `# noqa` silence a finding, and every card carries a one-line
+  **“How to fix”** hint.
 - **~25 built-in rules** (`server/src/scan/staticRules.ts`) covering classics: off-by-one loops, loose
   equality, `innerHTML`/XSS, `eval`, command injection, hardcoded credentials, unguarded `JSON.parse`,
   empty catches, `parseInt` without radix, Python bare `except`, `shell=True`, SQL f-strings, mutable
@@ -240,6 +245,18 @@ Because BugBanisher reads repositories through the GitHub API (it does not clone
 - **Model review** of up to 6 suspicious files, using the strict JSON schema in
   `prompts/findings.md`. Findings near a static hit are merged into "static + AI" with a confidence
   boost.
+
+### Quick fix vs. Needs AI
+
+Every card says what it will take to fix it:
+
+- **Quick fix** — a deterministic rule fix exists (off-by-one, loose equality, committed credential,
+  etc.). These work with **no model at all**, and the patch is verified exactly like a model patch.
+- **Needs AI** — the fix needs a model to draft it. If no model is reachable, the button says so
+  instead of failing after a click, and the Model panel shows the exact commands to start one.
+
+The server health-checks the model endpoint (3.5 s timeout) before scanning or drafting, so an
+offline Ollama never turns into a 60-second hang or a misleading “the model produced a bad patch”.
 
 ### Verification checklist (shown before you see a diff)
 
@@ -305,7 +322,7 @@ bugbanisher/
 | `GET` | `/api/session` | Connection, dry-run, approvals, history. |
 | `POST` | `/api/auth/pat` | Validate a token and store it in memory. |
 | `GET` | `/api/auth/github/start` | OAuth redirect (if configured). |
-| `GET` | `/api/repos` | Repos the user owns. |
+| `GET` | `/api/repos` | Repos you own (add `?includeWritable=1` for org repos you can write to). |
 | `POST` | `/api/scan` | Start a read-only scan job. |
 | `GET` | `/api/scan/:jobId` | Job progress + result. |
 | `POST` | `/api/fix` | Generate + verify a patch job. |
@@ -313,6 +330,7 @@ bugbanisher/
 | `POST` | `/api/approve` | The only write path (requires `confirm: true`). |
 | `GET` | `/api/history` | Approvals this session. |
 | `POST` | `/api/demo` | Load the bundled sample scan (offline). |
+| `GET` | `/api/model/status` | Is the AI model reachable? Includes setup commands. |
 | `POST` | `/api/settings/dry-run` | Toggle dry-run for this session. |
 | `POST` | `/api/auth/logout` | Forget the token and session scans. |
 
@@ -321,7 +339,8 @@ bugbanisher/
 ## Testing
 
 ```bash
-npm test                 # 34 tests: scanner, diff engine, verification, demo, UI render
+npm test                 # 47 tests: scanner, rule precision, diff engine, verification,
+                         #           demo, sessions, UI render
 npm run typecheck        # strict TypeScript for server and web
 npm run build            # production build of both workspaces
 
@@ -354,10 +373,12 @@ are refused, and the demo's cached patches pass the same verifier as real ones.
 - **The `ai-assisted` label needs Issues permission.** With the recommended minimal token it usually
   cannot be added; the PR body always contains the disclosure.
 - **In-memory sessions.** Restarting the server forgets tokens, scans and patches (by design). A
-  session lives for 12 hours of inactivity.
+  session lives for 12 hours of inactivity. Bundled Demo Mode scans are the one exception: they are
+  public sample data and are cached server-side so the demo survives a dropped session.
 - **Caps are per browser session.** Disconnecting and reconnecting starts a new session; the cap is a
   guardrail against automation, not a billing meter.
-- **Large repos are sampled.** Up to 25 files are scanned, up to 6 go to the model.
+- **Large repos are sampled.** Static checks cover up to 80 source files per scan (all of a typical
+  app); only 6 files go to the model, because that is the slow part.
 
 ---
 
@@ -365,6 +386,11 @@ are refused, and the demo's cached patches pass the same verifier as real ones.
 
 - The GitHub token is stored in a server-side `Map` keyed by a random httpOnly session cookie. It is
   never written to disk, never logged, and never sent to the browser.
+- When the browser blocks that cookie (preview iframes, strict third-party-cookie settings) the client
+  continues the same session with the `X-BB-Session` response header, kept in `sessionStorage` for the
+  tab's lifetime. It is the same unguessable id, not a token or credential, and it is never written to
+  disk. Demo Mode additionally keeps bundled scans in a small server-side cache so a demo can never
+  dead-end mid-presentation.
 - All model calls happen server-side. Files are filtered (no `.env`, no keys, no binaries) and
   redacted before they are used in snippets or displayed diffs.
 - Logs pass through `redact()`; GitHub error messages are returned without headers.

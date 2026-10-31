@@ -12,6 +12,8 @@
 import { useState, type FormEvent } from 'react';
 import type { ConnectResponse } from '../api';
 import { api } from '../api';
+import type { ModelStatus } from '../types';
+import { ModelStatusCard } from './ModelStatusCard';
 import { ErrorBanner } from './ErrorBanner';
 import { Ghost } from './Ghost';
 import { CheckIcon, GitHubIcon, KeyIcon, ShieldIcon, XIcon } from './Icons';
@@ -21,9 +23,20 @@ interface ConnectPanelProps {
   onConnected: (session: ConnectResponse) => void;
   onStartDemo: () => void;
   demoBusy: boolean;
+  model: ModelStatus | null;
+  modelLoading: boolean;
+  onCheckModel: () => void;
 }
 
-export function ConnectPanel({ oauthAvailable, onConnected, onStartDemo, demoBusy }: ConnectPanelProps) {
+export function ConnectPanel({
+  oauthAvailable,
+  onConnected,
+  onStartDemo,
+  demoBusy,
+  model,
+  modelLoading,
+  onCheckModel,
+}: ConnectPanelProps) {
   const [tab, setTab] = useState<'pat' | 'oauth'>(oauthAvailable ? 'pat' : 'pat');
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -223,6 +236,8 @@ export function ConnectPanel({ oauthAvailable, onConnected, onStartDemo, demoBus
             </span>
           </li>
         </ul>
+
+        <ModelStatusCard status={model} loading={modelLoading} onRefresh={onCheckModel} compact />
 
         <hr className="divider" />
         <button type="button" className="btn btn--ghost btn--block" onClick={onStartDemo} disabled={demoBusy}>

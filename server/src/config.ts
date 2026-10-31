@@ -44,8 +44,10 @@ export const config = {
   },
 
   scan: {
-    maxFiles: num('SCAN_MAX_FILES', 25),
-    maxFileBytes: num('SCAN_MAX_FILE_BYTES', 60_000),
+    // Static rules are cheap: scan the whole repo instead of a sample. Only the
+    // model review is bounded (llmMaxFiles) because that is what costs time.
+    maxFiles: num('SCAN_MAX_FILES', 80),
+    maxFileBytes: num('SCAN_MAX_FILE_BYTES', 120_000),
     llmMaxFiles: num('LLM_MAX_FILES', 6),
     llmMaxFileChars: num('LLM_MAX_FILE_CHARS', 6000),
   },

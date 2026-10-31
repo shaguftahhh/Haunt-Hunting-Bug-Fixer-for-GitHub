@@ -26,6 +26,8 @@ export interface RepoSummary {
   stars: number;
   updatedAt: string | null;
   htmlUrl: string;
+  /** The signed-in user has write access (true for owned and selected org repos). */
+  pushAccess?: boolean;
 }
 
 export interface Finding {
@@ -42,6 +44,10 @@ export interface Finding {
   snippet?: string;
   /** 1-based line number of the first line in `snippet`. */
   snippetStart?: number;
+  /** Plain-English "what to change" for this finding. */
+  fixHint?: string;
+  /** True when a deterministic patch exists (no model needed). */
+  autoFixAvailable?: boolean;
   ruleId?: string;
   issue?: { number: number; title: string; url: string; labels: string[] };
 }
@@ -54,6 +60,10 @@ export interface ScanStats {
   lintersDetected: string[];
   issuesRead: number;
   modelUsed: string | null;
+  /** Whether a model endpoint answered during this scan. */
+  modelAvailable: boolean;
+  /** Findings a deterministic patch can fix without a model. */
+  autoFixableCount: number;
   durationMs: number;
 }
 
@@ -124,6 +134,16 @@ export interface SessionView {
   history: PullRequestRecord[];
   demoAvailable: boolean;
   llm: { provider: string; model: string | null };
+}
+
+/** Health of the configured AI provider (reported by GET /api/model/status). */
+export interface ModelStatus {
+  provider: string;
+  model: string | null;
+  endpoint?: string;
+  ok: boolean;
+  detail: string;
+  setup: string[];
 }
 
 export interface JobView<T> {

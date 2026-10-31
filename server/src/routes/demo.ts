@@ -9,6 +9,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../http.js';
 import { getSession, storeScan } from '../session.js';
 import { buildDemoBundle } from '../demo/loader.js';
+import { rememberDemoScan } from '../demo/store.js';
 
 export const demoRouter = Router();
 
@@ -18,12 +19,15 @@ demoRouter.post(
     const session = getSession(req);
     const bundle = await buildDemoBundle();
 
-    storeScan(session, {
+    const record = {
       scan: bundle.scan,
       files: bundle.files,
       repo: bundle.repo,
       userLogin: session.user?.login ?? 'demo',
-    });
+    };
+    storeScan(session, record);
+    // Bundled demo data is safe to share across sessions; see demo/store.ts.
+    rememberDemoScan(record);
 
     // Demo Mode is always a dry run: there is no repository to write to.
     session.dryRun = true;
