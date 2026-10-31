@@ -9,7 +9,7 @@
  */
 import { Router } from 'express';
 import { asyncHandler, HttpError, requireAuth } from '../http.js';
-import { getJob, runningJobsFor, startJob } from '../jobs.js';
+import { cancelJob, getJob, runningJobsFor, startJob } from '../jobs.js';
 import { getSession, storeFix } from '../session.js';
 import { generateFix } from '../patch/generate.js';
 import { getFileWithSha } from '../github/client.js';
@@ -61,7 +61,10 @@ fixRouter.post(
       );
     }
 
-    const jobId = startJob<FixResult>(session.id, STEPS, async (ctx) => {
+    const jobId = startJob<FixResult>(
+      session.id,
+      STEPS,
+      async (ctx) => {
       ctx.step('Locating the file');
 
       let beforeContent = record.files.find((file) => file.path === finding.file)?.content ?? null;
@@ -114,7 +117,14 @@ fixRouter.post(
       storeFix(session, fixRecord);
       if (record.scan.mode === 'demo') rememberDemoFix(fixRecord);
       return fixRecord.fix;
-    });
+      },
+      {
+        timeoutMs: 120_000,
+        timeoutMessage: 'Drafting and verifying this patch took longer than 2 minutes, so it was stopped.',
+        timeoutHint:
+          'Nothing was written to GitHub. A slow model endpoint is the usual cause — try a "Quick fix" card, which never needs a model.',
+      },
+    );
 
     res.status(202).json({ jobId });
   }),
@@ -135,8 +145,20 @@ fixRouter.get(
       progress: job.progress,
       result: job.result,
       error: job.error,
+      hint: job.hint,
+      stalledForMs: job.status === 'running' ? Date.now() - job.lastProgressAt : 0,
     };
     res.json(view);
+  }),
+);
+
+fixRouter.post(
+  '/fix/:jobId/cancel',
+  asyncHandler(async (req, res) => {
+    const session = getSession(req);
+    const cancelled = cancelJob(req.params.jobId ?? '', session.id);
+    if (!cancelled) throw new HttpError(409, 'That fix already finished, so there was nothing to cancel.');
+    res.json({ cancelled: true });
   }),
 );
 

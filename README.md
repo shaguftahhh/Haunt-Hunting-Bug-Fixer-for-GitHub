@@ -258,6 +258,22 @@ Every card says what it will take to fix it:
 The server health-checks the model endpoint (3.5 s timeout) before scanning or drafting, so an
 offline Ollama never turns into a 60-second hang or a misleading “the model produced a bad patch”.
 
+### Nothing can hang silently
+
+Scans and patches run as background jobs, and every wait is visible and bounded:
+
+| Guard | Behaviour |
+|---|---|
+| `POST /api/scan` replies in milliseconds | Access checks run *inside* the job, so the UI always has a job id to poll |
+| `SCAN_TIMEOUT_MS` (default 150 s) | A scan that exceeds the deadline fails with a reason and a hint |
+| `LLM_BUDGET_MS` (default 45 s) | The AI review phase stops early and notes how many files were reviewed |
+| `LLM_TIMEOUT_MS` (default 30 s per file) | One slow file cannot stall the scan |
+| Client request deadline (20 s) | The browser reports “the server did not answer in time” instead of spinning |
+| **Cancel** button (`POST /api/scan/:jobId/cancel`) | Stops a slow scan immediately; nothing was written to GitHub |
+| Stall warning | After 45 s with no progress the UI says so and offers Cancel |
+
+Cancelling also frees the session, so you can immediately start another scan.
+
 ### Verification checklist (shown before you see a diff)
 
 1. Target is a normal source file (never a secret file).
@@ -339,8 +355,8 @@ bugbanisher/
 ## Testing
 
 ```bash
-npm test                 # 47 tests: scanner, rule precision, diff engine, verification,
-                         #           demo, sessions, UI render
+npm test                 # 51 tests: scanner, rule precision, diff engine, verification,
+                         #           demo, sessions, jobs, UI render
 npm run typecheck        # strict TypeScript for server and web
 npm run build            # production build of both workspaces
 

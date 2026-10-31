@@ -18,7 +18,13 @@ import { mechanicalFix } from '../patch/mechanical.js';
 import type { JobContext } from '../jobs.js';
 import { redactSecrets } from '../redaction.js';
 
-const noopContext: JobContext = { id: 'demo', step: () => {}, progress: () => {} };
+const noopContext: JobContext = {
+  id: 'demo',
+  signal: new AbortController().signal,
+  step: () => {},
+  progress: () => {},
+  checkpoint: () => {},
+};
 
 export interface CachedFinding {
   file: string;

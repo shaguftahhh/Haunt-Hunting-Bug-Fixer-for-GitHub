@@ -40,7 +40,8 @@ export const config = {
     openaiBaseUrl: str('OPENAI_BASE_URL', 'http://localhost:1234/v1').replace(/\/$/, ''),
     openaiApiKey: str('OPENAI_API_KEY'),
     jsonMode: str('LLM_JSON_MODE', 'true').toLowerCase() !== 'false',
-    timeoutMs: num('LLM_TIMEOUT_MS', 180_000),
+    // Per-file model timeout. A whole scan must never sit on one slow file.
+    timeoutMs: num('LLM_TIMEOUT_MS', 30_000),
   },
 
   scan: {
@@ -50,6 +51,12 @@ export const config = {
     maxFileBytes: num('SCAN_MAX_FILE_BYTES', 120_000),
     llmMaxFiles: num('LLM_MAX_FILES', 6),
     llmMaxFileChars: num('LLM_MAX_FILE_CHARS', 6000),
+    /** Total wall-clock budget for the AI review phase of one scan. */
+    llmBudgetMs: num('LLM_BUDGET_MS', 45_000),
+    /** Hard deadline for a whole scan job. */
+    timeoutMs: num('SCAN_TIMEOUT_MS', 150_000),
+    /** How many files to download in parallel (GitHub allows this easily). */
+    fileConcurrency: num('SCAN_FILE_CONCURRENCY', 6),
   },
 
   safety: {

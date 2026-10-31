@@ -146,6 +146,10 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     skippedReasons[reason] = (skippedReasons[reason] ?? 0) + 1;
   };
 
+  const abort = () => {
+    if (signal?.aborted) throw new Error('Scan cancelled.');
+  };
+
   ctx.step('Reading the repository tree');
 
   let paths: string[] = input.localPaths ?? [];
@@ -163,6 +167,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     if (treeTruncated) notes.push('GitHub truncated the file tree, so very large repos may be partially scanned.');
   }
 
+  abort();
   ctx.step('Skipping secrets and binaries');
   const candidates: string[] = [];
   for (const path of paths) {
@@ -186,6 +191,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     );
   }
 
+  abort();
   ctx.step('Fetching source files');
   let files: RepoFile[] = [];
 
@@ -196,7 +202,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
       .filter((file): file is RepoFile => Boolean(file));
   } else {
     let fetched = 0;
-    const fetchedFiles = await mapLimit(selectedPaths, 4, async (path) => {
+    const fetchedFiles = await mapLimit(selectedPaths, config.scan.fileConcurrency, async (path) => {
       try {
         const file = await getFile(token, repo.owner, repo.name, path, repo.defaultBranch);
         fetched += 1;
@@ -227,6 +233,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     );
   }
 
+  abort();
   ctx.step('Running static checks');
   // Config files (package.json, tsconfig.json, .eslintrc…) are not source files,
   // but their presence is what tells the user which linters the repo uses.
@@ -282,6 +289,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     },
   ];
 
+  abort();
   ctx.step('Reading open bug issues');
   let issuesRead = 0;
   if (token) {
@@ -315,6 +323,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     }
   }
 
+  abort();
   ctx.step('Asking the model to review');
   let modelUsed: string | null = null;
   let llmFindings: Finding[] = [];
@@ -333,7 +342,10 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
       notes.push(`Model review skipped: ${health.detail} Static checks and issues were still scanned.`);
     } else {
       try {
-        const result = await reviewFilesWithLLM(provider, repo.fullName, scanForLLM, signal);
+        // Budget the whole review phase: a single slow file must not make the
+        // scan appear frozen for minutes.
+        const deadline = Date.now() + config.scan.llmBudgetMs;
+        const result = await reviewFilesWithLLM(provider, repo.fullName, scanForLLM, signal, deadline);
         llmFindings = result.findings;
         modelUsed = result.filesReviewed > 0 ? result.model : null;
         notes.push(...result.notes);
@@ -346,6 +358,7 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
     }
   }
 
+  abort();
   ctx.step('Scoring findings');
   let finalFindings = mergeLlmFindings(findings, llmFindings);
 

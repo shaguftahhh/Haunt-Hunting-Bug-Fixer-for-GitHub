@@ -154,4 +154,8 @@ export interface JobView<T> {
   progress: number;
   result: T | null;
   error: string | null;
+  /** Extra guidance for the error (what to try next). */
+  hint?: string | null;
+  /** Milliseconds since progress last moved — lets the UI show a stall warning. */
+  stalledForMs?: number;
 }

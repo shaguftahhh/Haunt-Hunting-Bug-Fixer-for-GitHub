@@ -177,6 +177,8 @@ authRouter.get(
     const { token, login } = requireAuth(req);
     const includeWritable = req.query.includeWritable === '1';
     const repos = await listOwnedRepos(token, login, { includeWritable });
+    // Cache for the next scan so it can start immediately (see routes/scan.ts).
+    getSession(req).repos = repos;
     res.json({
       login,
       repos,

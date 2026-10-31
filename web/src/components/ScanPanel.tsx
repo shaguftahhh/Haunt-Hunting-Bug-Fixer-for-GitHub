@@ -49,6 +49,8 @@ export function ScanPanel({
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [stalledFor, setStalledFor] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
   const cancelled = useRef(false);
 
   useEffect(() => {
@@ -69,6 +71,7 @@ export function ScanPanel({
         setStep(job.step);
         setSteps(job.steps.length > 0 ? job.steps : FALLBACK_STEPS);
         setProgress(job.progress);
+        setStalledFor(job.stalledForMs ?? 0);
 
         if (job.status === 'done' && job.result) {
           setResult(job.result);
@@ -77,7 +80,7 @@ export function ScanPanel({
           return;
         }
         if (job.status === 'error') {
-          setError(new ApiError(job.error ?? 'The scan failed.', 500));
+          setError(new ApiError(job.error ?? 'The scan failed.', 500, job.hint ?? undefined));
           setPhase('error');
           return;
         }
@@ -110,10 +113,32 @@ export function ScanPanel({
     }
   }
 
+  async function cancelScan() {
+    if (!jobId) return;
+    setCancelling(true);
+    try {
+      await api.cancelScan(jobId);
+      setPhase('error');
+      setError(
+        new ApiError(
+          'Scan cancelled.',
+          499,
+          'Nothing was written to GitHub. Start a new scan whenever you like.',
+        ),
+      );
+    } catch (err) {
+      setError(err);
+      setPhase('error');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const activeIndex = Math.max(
     0,
     steps.findIndex((candidate) => candidate === step),
   );
+  const stalled = stalledFor > 45_000;
 
   return (
     <div className="stack">
@@ -163,7 +188,7 @@ export function ScanPanel({
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span className="small">
                   <span className="spinner" aria-hidden="true" style={{ display: 'inline-block', marginRight: '0.5rem' }} />
-                  {step}
+                  Scanning — you can keep this tab in the background
                 </span>
                 <span className="small dim mono">{progress}%</span>
               </div>
@@ -202,6 +227,38 @@ export function ScanPanel({
             <p className="tiny dim" style={{ margin: 0 }}>
               Local models can take a while. The whole scan is read-only; you can leave this page and come back.
             </p>
+
+            {stalled ? (
+              <div className="alert alert--warn" role="status">
+                <span className="alert__icon" aria-hidden="true">⏳</span>
+                <div>
+                  <strong>This step is taking longer than usual.</strong> It has not moved for{' '}
+                  {Math.round(stalledFor / 1000)}s. Large repositories and slow model endpoints cause this —
+                  you can wait, or cancel and retry. Nothing is written to GitHub either way.
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() => void cancelScan()}
+                      disabled={cancelling}
+                    >
+                      {cancelling ? 'Cancelling…' : 'Cancel scan'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="row">
+                <button
+                  type="button"
+                  className="btn btn--small btn--ghost"
+                  onClick={() => void cancelScan()}
+                  disabled={cancelling}
+                >
+                  {cancelling ? 'Cancelling…' : 'Cancel scan'}
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
 

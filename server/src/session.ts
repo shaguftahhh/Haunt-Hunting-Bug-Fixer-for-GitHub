@@ -12,6 +12,7 @@ import type {
   FixRecord,
   GitHubUser,
   PullRequestRecord,
+  RepoSummary,
   ScanRecord,
   SessionView,
 } from './types.js';
@@ -50,6 +51,12 @@ export interface SessionData {
   scans: Map<string, ScanRecord>;
   fixes: Map<string, FixRecord>;
   oauthState: string | null;
+  /**
+   * Last repository list we fetched for this user. Lets a scan start without
+   * another slow GitHub listing (that listing used to block the scan request
+   * before a job id existed, which looked like a freeze).
+   */
+  repos?: RepoSummary[];
 }
 
 const sessions = new Map<string, SessionData>();

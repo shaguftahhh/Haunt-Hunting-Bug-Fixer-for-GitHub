@@ -65,6 +65,9 @@ export function FixPanel({
   const [fix, setFix] = useState<FixResult | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [attempt, setAttempt] = useState(0);
+  const [stalledFor, setStalledFor] = useState(0);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const cancelled = useRef(false);
 
   useEffect(() => {
@@ -86,6 +89,7 @@ export function FixPanel({
       try {
         const started = await api.startFix(scan.scanId, finding.id);
         jobId = started.jobId;
+        if (!cancelled.current) setJobId(jobId);
       } catch (err) {
         if (!cancelled.current) {
           setError(err);
@@ -101,13 +105,14 @@ export function FixPanel({
           if (cancelled.current) return;
           setStep(job.step);
           setProgress(job.progress);
+          setStalledFor(job.stalledForMs ?? 0);
           if (job.status === 'done' && job.result) {
             setFix(job.result);
             setPhase('done');
             return;
           }
           if (job.status === 'error') {
-            setError(new ApiError(job.error ?? 'Patch generation failed.', 422));
+            setError(new ApiError(job.error ?? 'Patch generation failed.', 422, job.hint ?? undefined));
             setPhase('error');
             return;
           }
@@ -129,7 +134,25 @@ export function FixPanel({
     };
   }, [scan.scanId, finding.id, attempt]);
 
+  async function cancelFix() {
+    if (!jobId) return;
+    setCancelling(true);
+    try {
+      await api.cancelFix(jobId);
+      setPhase('error');
+      setError(
+        new ApiError('Stopped.', 499, 'Nothing was written to GitHub. You can try again or pick another bug.'),
+      );
+    } catch (err) {
+      setError(err);
+      setPhase('error');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const approvalBlocked = approvals >= approvalCap;
+  const stalled = stalledFor > 45_000;
   const passed = fix?.verification.filter((check) => check.ok).length ?? 0;
   const total = fix?.verification.length ?? 0;
 
@@ -198,6 +221,25 @@ export function FixPanel({
             <p className="tiny dim" style={{ margin: 0 }}>
               The patch is checked on the server before you see it. Nothing is written to GitHub here.
             </p>
+
+            {stalled ? (
+              <div className="alert alert--warn" role="status">
+                <span className="alert__icon" aria-hidden="true">⏳</span>
+                <div>
+                  <strong>This is taking longer than usual.</strong> No progress for{' '}
+                  {Math.round(stalledFor / 1000)}s — usually a slow model endpoint.
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <button type="button" className="btn btn--small" onClick={() => void cancelFix()} disabled={cancelling}>
+                      {cancelling ? 'Stopping…' : 'Stop'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn btn--small btn--ghost" onClick={() => void cancelFix()} disabled={cancelling}>
+                {cancelling ? 'Stopping…' : 'Stop'}
+              </button>
+            )}
           </div>
         ) : null}
 
