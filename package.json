@@ -13,10 +13,11 @@
     "build": "npm run build -w web && npm run build -w server",
     "start": "node server/dist/index.js",
     "serve": "npm run build && npm start",
-    "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w web && tsc -p tsconfig.api.json",
     "test": "npm test -w server && npm test -w web",
     "demo:cache": "tsx scripts/build-demo-cache.mts",
-    "scan:sample": "tsx scripts/scan-sample.mts"
+    "scan:sample": "tsx scripts/scan-sample.mts",
+    "check:vercel": "tsx scripts/serverless-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

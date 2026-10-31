@@ -48,10 +48,22 @@ export interface GeneratedFix {
 
 const SECRET_RULE_IDS = new Set(['js/hardcoded-secret', 'generic/private-key']);
 
+/**
+ * Deterministic fix id for Demo Mode: the same scan + finding always produces
+ * the same id, so a cold serverless instance can rebuild the patch on demand.
+ */
+export function demoFixIdFor(scanId: string, findingId: string): string {
+  const hash = crypto.createHash('sha256').update(`${scanId}:${findingId}`).digest('hex');
+  return `demo-${hash.slice(0, 16)}`;
+}
+
 export async function generateFix(input: GenerateFixInput, ctx: JobContext): Promise<GeneratedFix> {
   const { finding, path, beforeContent } = input;
   const provider = getLLMProvider();
-  const fixId = crypto.randomBytes(10).toString('base64url');
+  // Demo fixes are deterministic, so a cold serverless instance can rebuild the
+  // same patch for the same fix id. Real fixes stay random.
+  const fixId =
+    input.mode === 'demo' ? demoFixIdFor(input.scanId, finding.id) : crypto.randomBytes(10).toString('base64url');
 
   const fileLooksSecret = containsSecretLikeText(beforeContent);
   const ruleIsSecret = finding.ruleId ? SECRET_RULE_IDS.has(finding.ruleId) : false;

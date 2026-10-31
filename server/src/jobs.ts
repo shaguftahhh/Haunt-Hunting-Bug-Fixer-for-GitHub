@@ -174,6 +174,34 @@ export function startJob<T>(
   return id;
 }
 
+/**
+ * Run a job to completion in the current request and return its record.
+ *
+ * Used on serverless platforms: there is no guarantee the next poll reaches the
+ * same instance, so returning a job id alone would strand the client. Kept
+ * beside `startJob` so both share the same record shape, deadline handling and
+ * error/hint semantics.
+ */
+export async function runJobNow<T>(
+  sessionId: string,
+  steps: string[],
+  task: (ctx: JobContext) => Promise<T>,
+  options: JobOptions = {},
+): Promise<JobRecord<T>> {
+  const inline = startJob<T>(sessionId, steps, task, options);
+  // `startJob` resolves asynchronously; wait for the record to leave 'running'.
+  const started = Date.now();
+  const deadline = started + (options.timeoutMs ?? DEFAULT_TIMEOUT_MS) + 5_000;
+
+  for (;;) {
+    const record = jobs.get(inline) as JobRecord<T> | undefined;
+    if (!record) throw new Error('Inline job disappeared.');
+    if (record.status !== 'running') return record;
+    if (Date.now() > deadline) return record;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
 export function getJob<T>(id: string, sessionId: string): JobRecord<T> | null {
   const job = jobs.get(id);
   if (!job || job.sessionId !== sessionId) return null; // never leak another session's job

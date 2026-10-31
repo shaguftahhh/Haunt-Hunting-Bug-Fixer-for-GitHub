@@ -16,11 +16,12 @@
  */
 import { Router } from 'express';
 import { asyncHandler, HttpError, requireAuth } from '../http.js';
-import { cancelJob, getJob, runningJobIdFor, runningJobsFor, startJob } from '../jobs.js';
+import { cancelJob, getJob, runningJobIdFor, runningJobsFor, runJobNow, startJob } from '../jobs.js';
 import { getRepo, listOwnedRepos } from '../github/client.js';
 import { getSession, storeScan } from '../session.js';
 import { runScan } from '../scan/engine.js';
-import { getRememberedDemoScan } from '../demo/store.js';
+import { resolveDemoScan } from '../demo/rebuild.js';
+import type { JobContext } from '../jobs.js';
 import { config } from '../config.js';
 import type { JobView, RepoFile, RepoSummary, ScanResult } from '../types.js';
 
@@ -63,10 +64,7 @@ scanRouter.post(
     const [owner, name] = repoFullName.split('/') as [string, string];
 
     let files: RepoFile[] = [];
-    const jobId = startJob<ScanResult>(
-      session.id,
-      STEPS,
-      async (ctx) => {
+    const task = async (ctx: JobContext): Promise<ScanResult> => {
         ctx.step('Checking repository access');
 
         // A repo we already listed is trusted; otherwise re-list (slow, but rare).
@@ -114,17 +112,28 @@ scanRouter.post(
           ctx,
           ctx.signal,
         );
-        storeScan(session, { scan: result, files, repo, userLogin: login });
-        return result;
-      },
-      {
-        timeoutMs: config.scan.timeoutMs,
-        timeoutMessage: `The scan did not finish within ${Math.round(config.scan.timeoutMs / 1000)}s, so BugBanisher stopped it.`,
-        timeoutHint:
-          'Nothing was written to GitHub. Large repositories and slow networks can cause this — try again, raise SCAN_TIMEOUT_MS, or scan a smaller repo.',
-      },
-    );
+      storeScan(session, { scan: result, files, repo, userLogin: login });
+      return result;
+    };
 
+    const jobOptions = {
+      timeoutMs: config.scan.timeoutMs,
+      timeoutMessage: `The scan did not finish within ${Math.round(config.scan.timeoutMs / 1000)}s, so BugBanisher stopped it.`,
+      timeoutHint:
+        'Nothing was written to GitHub. Large repositories and slow networks can cause this — try again, raise SCAN_TIMEOUT_MS, or scan a smaller repo.',
+    };
+
+    if (config.serverless) {
+      // A poll may land on a different instance, so finish inside this request.
+      const record = await runJobNow<ScanResult>(session.id, STEPS, task, jobOptions);
+      if (record.status === 'error') {
+        throw new HttpError(422, record.error ?? 'The scan failed.', record.hint ?? undefined);
+      }
+      res.status(200).json({ jobId: record.id, result: record.result });
+      return;
+    }
+
+    const jobId = startJob<ScanResult>(session.id, STEPS, task, jobOptions);
     res.status(202).json({ jobId });
   }),
 );
@@ -168,7 +177,7 @@ scanRouter.get(
   asyncHandler(async (req, res) => {
     const session = getSession(req);
     const record =
-      session.scans.get(req.params.scanId ?? '') ?? getRememberedDemoScan(req.params.scanId ?? '');
+      session.scans.get(req.params.scanId ?? '') ?? (await resolveDemoScan(req.params.scanId ?? ''));
     if (!record) {
       throw new HttpError(
         404,

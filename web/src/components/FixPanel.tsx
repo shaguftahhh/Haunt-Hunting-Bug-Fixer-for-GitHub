@@ -90,6 +90,17 @@ export function FixPanel({
         const started = await api.startFix(scan.scanId, finding.id);
         jobId = started.jobId;
         if (!cancelled.current) setJobId(jobId);
+
+        // Serverless deployments run the fix inside the request.
+        if (started.result) {
+          if (!cancelled.current) {
+            setProgress(100);
+            setStep('Verified');
+            setFix(started.result);
+            setPhase('done');
+          }
+          return;
+        }
       } catch (err) {
         if (!cancelled.current) {
           setError(err);

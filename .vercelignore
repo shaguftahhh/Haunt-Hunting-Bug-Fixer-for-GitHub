@@ -1,0 +1,11 @@
+# Files Vercel does not need to upload. Keeping this small makes cold starts fast.
+node_modules
+web/dist
+server/dist
+.git
+*.log
+.env
+.env.*
+!.env.example
+coverage
+tmp

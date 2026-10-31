@@ -164,8 +164,13 @@ export const api = {
       body: JSON.stringify({ dryRun }),
     }),
 
+  /**
+   * Starts a scan. On a long-lived server this returns a job id to poll; on a
+   * serverless deployment the scan finishes inside the request and `result` is
+   * already present, so the UI can skip polling entirely.
+   */
   startScan: (repoFullName: string) =>
-    request<{ jobId: string }>('/scan', {
+    request<{ jobId: string; result?: ScanResult }>('/scan', {
       method: 'POST',
       body: JSON.stringify({ repoFullName }),
     }),
@@ -181,7 +186,7 @@ export const api = {
   getScan: (scanId: string) => request<ScanResult>(`/scan/result/${encodeURIComponent(scanId)}`),
 
   startFix: (scanId: string, findingId: string) =>
-    request<{ jobId: string }>('/fix', {
+    request<{ jobId: string; result?: FixResult }>('/fix', {
       method: 'POST',
       body: JSON.stringify({ scanId, findingId }),
     }),

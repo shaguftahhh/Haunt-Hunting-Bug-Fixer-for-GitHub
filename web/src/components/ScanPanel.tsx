@@ -115,8 +115,17 @@ export function ScanPanel({
     setStep(FALLBACK_STEPS[0] ?? '');
     setSteps(FALLBACK_STEPS);
     try {
-      const { jobId: id } = await api.startScan(repo.fullName);
+      const { jobId: id, result: immediate } = await api.startScan(repo.fullName);
       setJobId(id);
+
+      // Serverless deployments return the finished scan in the same response.
+      if (immediate) {
+        setResult(immediate);
+        setProgress(100);
+        setStep('Done');
+        setPhase('done');
+        return;
+      }
     } catch (err) {
       setError(err);
       setPhase('error');
