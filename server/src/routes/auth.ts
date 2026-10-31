@@ -58,12 +58,12 @@ authRouter.post(
     if (token.length < 20 || token.length > 255) {
       throw new HttpError(400, 'That does not look like a GitHub token.');
     }
-    if (!/^(gh[pousr]_|github_pat_)/.test(token)) {
-      throw new HttpError(
-        400,
-        'Tokens start with ghp_ (classic), github_pat_ (fine-grained) or gho_ (OAuth).',
-      );
+    if (/\s/.test(token)) {
+      throw new HttpError(400, 'That token contains spaces. Copy it again without line breaks.');
     }
+    // We intentionally do not enforce a prefix: fine-grained tokens start with
+    // github_pat_, classic with ghp_, OAuth with gho_, and GitHub App tokens
+    // with ghs_. GitHub itself is the authority — the next call validates it.
 
     try {
       const { user, scopes } = await getAuthenticatedUser(token);

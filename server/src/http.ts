@@ -11,6 +11,7 @@ export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly hint?: string,
   ) {
     super(message);
     this.name = 'HttpError';
@@ -48,7 +49,9 @@ export function errorHandler(
     return;
   }
   if (error instanceof HttpError) {
-    res.status(error.status).json({ error: error.message, status: error.status } satisfies ApiErrorBody);
+    res
+      .status(error.status)
+      .json({ error: error.message, hint: error.hint, status: error.status } satisfies ApiErrorBody);
     return;
   }
   const message = safeErrorMessage(error);

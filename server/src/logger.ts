@@ -6,20 +6,13 @@
  * net, not a license to log secrets.
  */
 
-const SECRET_PATTERNS: Array<[RegExp, string]> = [
-  [/\bgh[pousr]_[A-Za-z0-9_]{10,}\b/g, '[redacted-github-token]'],
-  [/\bgithub_pat_[A-Za-z0-9_]{10,}\b/g, '[redacted-github-token]'],
-  [/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-api-key]'],
-  [/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, 'Bearer [redacted]'],
-  [/((?:token|secret|password|api[_-]?key)\s*[:=]\s*)["']?[^\s"',}]+/gi, '$1[redacted]'],
-];
+import { redactSecrets } from './redaction.js';
+
+const ENV_ASSIGNMENT = /\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*\s*=\s*)\S+/g;
 
 export function redact(input: unknown): string {
-  let text = typeof input === 'string' ? input : safeStringify(input);
-  for (const [pattern, replacement] of SECRET_PATTERNS) {
-    text = text.replace(pattern, replacement);
-  }
-  return text;
+  const text = typeof input === 'string' ? input : safeStringify(input);
+  return redactSecrets(text).replace(ENV_ASSIGNMENT, '$1[redacted]');
 }
 
 function safeStringify(value: unknown): string {

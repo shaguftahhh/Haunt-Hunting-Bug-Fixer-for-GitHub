@@ -54,6 +54,8 @@ export interface Finding {
   /** "Why it matters" for learners. */
   whyItMatters: string;
   snippet?: string;
+  /** 1-based line number of the first line in `snippet`. */
+  snippetStart?: number;
   ruleId?: string;
   issue?: { number: number; title: string; url: string; labels: string[] };
 }

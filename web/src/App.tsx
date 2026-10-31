@@ -36,6 +36,7 @@ export default function App() {
   const [repo, setRepo] = useState<RepoSummary | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [finding, setFinding] = useState<Finding | null>(null);
+  const [banished, setBanished] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
 
   // Load the session on first paint (and after an OAuth redirect).
@@ -193,6 +194,7 @@ export default function App() {
           <ScanPanel
             repo={repo}
             dryRun={session.dryRun}
+            llm={session.llm}
             onBack={() => setView('repos')}
             onScanned={(result) => {
               setScan(result);
@@ -204,6 +206,7 @@ export default function App() {
         {!booting && connected && view === 'board' && scan ? (
           <BugBoard
             scan={scan}
+            banished={banished}
             onBack={() => setView('scan')}
             onRescan={() => setView('scan')}
             onPickFix={(picked) => {
@@ -223,6 +226,11 @@ export default function App() {
             onBack={() => setView('board')}
             onOpened={(updatedSession, message) => {
               setSession(updatedSession);
+              setBanished((previous) => {
+                const next = new Set(previous);
+                next.add(finding.id);
+                return next;
+              });
               setNotice(message);
               setView('board');
             }}
