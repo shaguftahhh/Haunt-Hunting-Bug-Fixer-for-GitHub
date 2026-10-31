@@ -9,6 +9,9 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildDemoBundle, demoScanId } from '../src/demo/loader.js';
 import { demoFixIdFor } from '../src/patch/generate.js';
 import { resolveDemoFix, resolveDemoScan } from '../src/demo/rebuild.js';
@@ -52,4 +55,40 @@ test('a cold instance can rebuild a demo fix from its deterministic id', async (
 test('a fix id that does not belong to the demo is never resurrected', async () => {
   assert.equal(await resolveDemoFix('demo-ffffffffffffffff'), null);
   assert.equal(await resolveDemoFix('abcd1234'), null);
+});
+
+/**
+ * Regression guard for a production outage:
+ *
+ * Vercel compiles `api/index.ts` to CommonJS, while `server/` is an ES module
+ * package. A *static* import of the server from the entry point was emitted as
+ * `require('../server/src/app.js')`, which throws ERR_REQUIRE_ESM on Node
+ * runtimes without require(esm) support — the module crashed while loading, so
+ * every route answered 500 FUNCTION_INVOCATION_FAILED, including /api/health.
+ *
+ * The entry must therefore load the app with a dynamic import(), which Vercel's
+ * CommonJS output preserves.
+ */
+test('the Vercel entry never statically imports the ESM server package', () => {
+  // Resolve from this test file, not the working directory: `npm test -w server`
+  // runs with cwd = server/.
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const entry = fs.readFileSync(path.join(repoRoot, 'api/index.ts'), 'utf8');
+  const code = entry
+    .split('\n')
+    .filter((line) => !line.trimStart().startsWith('//') && !line.trimStart().startsWith('*'))
+    .join('\n');
+
+  const staticServerImport = /^\s*import\s+(?:[^'"]*?\s+from\s+)?['"]\.\.\/server\//m;
+  assert.equal(
+    staticServerImport.test(code),
+    false,
+    'api/index.ts must not statically import ../server/* — Vercel turns that into require() of an ES module (ERR_REQUIRE_ESM)',
+  );
+
+  assert.match(
+    code,
+    /import\(\s*['"]\.\.\/server\/src\/app\.js['"]\s*\)/,
+    'api/index.ts must load the app with a dynamic import()',
+  );
 });

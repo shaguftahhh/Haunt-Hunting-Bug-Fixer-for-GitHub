@@ -115,9 +115,39 @@ It means Vercel was pointed at the wrong folder, or deployed a commit without `v
 | Same JSON | The deployed commit predates `vercel.json` / `api/index.ts` | Deploy a commit that contains both |
 | Page loads but no styles/app | Output Directory or build command overridden in the dashboard | Use the values in `vercel.json` (`npm run build -w web`, `web/dist`) |
 
-`GET /api/health` now reports `ui: true|false` so you can tell in one request whether a deployment
-has a built frontend. If it is `false`, opening the site shows a styled setup page with these steps
-instead of raw JSON — the API keeps working meanwhile.
+`GET /api/health` reports **who serves the UI**:
+
+```json
+{"ok": true, "ui": "cdn", "serverless": true}
+```
+
+`"ui": "function"` — this process serves `web/dist` (local `npm start`, Node hosts).
+`"ui": "cdn"` — a platform serves the static build (Vercel). The function deliberately does not
+ship `web/dist`, so this is normal.
+`"ui": "missing"` — nothing serves a UI here; opening the root URL shows the setup page.
+
+#### If every `/api/*` route returns `500 FUNCTION_INVOCATION_FAILED`
+
+The function is crashing **while loading**, before Express can answer — that is why even
+`/api/health` fails. The cause was a module-system mismatch:
+
+- Vercel compiles `api/index.ts` to **CommonJS**.
+- `server/` is an **ES module** package (`"type": "module"`).
+- A static `import { app } from '../server/src/app.js'` therefore became
+  `require('../server/src/app.js')` → `ERR_REQUIRE_ESM` on Node < 22.12.
+
+`api/index.ts` now loads the app with a **dynamic `import()`**, which survives Vercel's CommonJS
+output, so it works on any supported Node runtime. `engines.node` is pinned to `22.x` as well.
+`server/test/serverless.test.ts` fails the build if a static server import ever returns, and
+`api/index.ts` returns the real load error as JSON instead of an opaque 500.
+
+Reproduced and verified with Vercel's own builder (`@vercel/node`), executing the emitted function
+under Node-20 `require` semantics:
+
+```bash
+node --no-experimental-require-module   # require() of ESM disabled, as on Node 20
+# /api/health → 200 · demo → 5 findings · fix → verified, 10 checks · approve → dry-run 1/3
+```
 
 What changes in serverless mode (`SERVERLESS=1`, set automatically by Vercel):
 

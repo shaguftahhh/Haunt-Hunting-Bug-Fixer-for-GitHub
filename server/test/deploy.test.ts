@@ -29,12 +29,18 @@ test.after(() => {
   server.close();
 });
 
-test('health reports that no UI is built', async () => {
+test('health says who serves the UI', async () => {
   const res = await fetch(`${base}/api/health`);
-  const body = (await res.json()) as { ok: boolean; ui: boolean; serverless: boolean };
+  const body = (await res.json()) as {
+    ok: boolean;
+    ui: 'function' | 'cdn' | 'missing';
+    serverless: boolean;
+  };
   assert.equal(res.status, 200);
   assert.equal(body.ok, true);
-  assert.equal(body.ui, false);
+  // No web/dist here, but a serverless platform serves the static build from its
+  // own CDN, so this is not an error state.
+  assert.equal(body.ui, 'cdn');
   assert.equal(body.serverless, true);
 });
 
