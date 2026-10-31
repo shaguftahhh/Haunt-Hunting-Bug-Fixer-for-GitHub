@@ -171,6 +171,8 @@ test('Bug Board renders findings, issue findings, snippets and the demo banner s
   assert.match(html, /banished/);
   assert.match(html, /issue #42/);
   assert.match(html, /Why it matters/);
+  assert.match(html, /How to fix:/);
+  assert.match(html, /Quick fix/);
   assert.match(html, /Exit demo/);
   // Demo scans must never render a GitHub code link.
   assert.ok(!html.includes('/blob/main'), 'demo findings must not link to GitHub');

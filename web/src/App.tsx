@@ -289,7 +289,12 @@ export default function App() {
           <BugBoard
             scan={scan}
             banished={banished}
-            model={demoMode ? { provider: 'cached', model: 'cached demo', ok: true, detail: 'Cached demo responses', setup: [] } : model.status}
+            demo={demoMode}
+            model={
+              demoMode
+                ? { provider: 'cached', model: 'cached demo', ok: true, detail: 'Cached demo responses', setup: [] }
+                : model.status
+            }
             backLabel={demoMode ? 'Exit demo' : undefined}
             onBack={() => (demoMode ? exitDemo() : setView('scan'))}
             onRescan={() => (demoMode ? void enterDemo() : setView('scan'))}

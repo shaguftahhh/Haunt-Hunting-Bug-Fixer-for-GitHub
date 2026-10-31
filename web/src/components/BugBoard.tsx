@@ -22,6 +22,8 @@ type SortKey = 'severity' | 'confidence' | 'file';
 interface BugBoardProps {
   scan: ScanResult;
   banished?: Set<string>;
+  /** Demo Mode replays cached patches, so the label is different. */
+  demo?: boolean;
   model?: ModelStatus | null;
   backLabel?: string;
   onBack: () => void;
@@ -88,6 +90,7 @@ function Confidence({ value }: { value: number }) {
 export function BugBoard({
   scan,
   banished,
+  demo,
   model,
   backLabel,
   onBack,
@@ -324,7 +327,7 @@ export function BugBoard({
             const href = codeHref(scan, finding);
             const canAutoFix = quickFix(finding);
             const cantPatch = !patchable(finding);
-            const blockedByModel = needsModel(finding) && !modelReady;
+            const blockedByModel = needsModel(finding) && !modelReady && !demo;
 
             return (
               <li
@@ -351,6 +354,10 @@ export function BugBoard({
                   ) : cantPatch ? (
                     <span className="badge badge--muted" title="This finding comes from an issue, not a line of code">
                       Needs a file
+                    </span>
+                  ) : demo ? (
+                    <span className="badge badge--muted" title="Demo Mode replays a cached patch for this bug">
+                      Demo fix
                     </span>
                   ) : (
                     <span className="badge badge--muted" title="An AI model drafts this patch">
