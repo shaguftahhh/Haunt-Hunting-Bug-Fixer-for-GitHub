@@ -77,9 +77,12 @@ app.get('/api/health', (_req, res) => {
     oauth: oauthAvailable(),
     llmProvider: config.llm.provider,
     version: '1.0.0',
-    // Deployment self-diagnosis: `ui: false` means this deployment has no built
-    // frontend, so opening the root URL can only show setup instructions.
-    ui: uiBuilt(),
+    // Deployment self-diagnosis. `ui` says who serves the React app:
+    //   'function' → this process serves web/dist (local `npm start`, Node hosts)
+    //   'cdn'      → a platform serves the static build (Vercel); the function
+    //                never ships web/dist, so its absence is expected
+    //   'missing'  → nothing serves a UI here; the root URL shows setup help
+    ui: uiBuilt() ? 'function' : config.serverless ? 'cdn' : 'missing',
     serverless: config.serverless,
   });
 });

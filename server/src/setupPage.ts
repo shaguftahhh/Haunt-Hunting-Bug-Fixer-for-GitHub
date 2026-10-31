@@ -94,6 +94,11 @@ export function apiOnlyPage(options: SetupPageOptions = { serverless: false }): 
         Output Directory <code>web/dist</code>. <code>vercel.json</code> already sets these — clear any
         overrides in the dashboard and redeploy.
       </li>
+      <li>
+        <strong>Node.js Version</strong> should be <strong>22.x</strong>. An older runtime cannot load
+        this project's ES modules from the API function, which fails every <code>/api/*</code> route
+        with <code>500 FUNCTION_INVOCATION_FAILED</code>.
+      </li>
     </ol>
 
     <h2>The API works right now</h2>
