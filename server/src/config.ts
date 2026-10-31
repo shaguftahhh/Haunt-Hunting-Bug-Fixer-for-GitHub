@@ -5,6 +5,29 @@
  * logged and never included in the /api/config response sent to the browser.
  */
 import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
+
+/**
+ * Resolve a folder that ships with the repo (prompts/, demo/, web/dist/).
+ *
+ * Order matters for portability:
+ *   1. an explicit environment override,
+ *   2. relative to the working directory (local dev, `npm start`, and the
+ *      serverless bundle, where the repo is copied to the working directory),
+ *   3. relative to this module (belt and braces; import.meta is not always
+ *      available once a bundler targets CommonJS).
+ */
+function resolveDir(envValue: string, cwdRelative: string, moduleRelative: string): string {
+  if (envValue) return envValue;
+  const fromCwd = path.join(process.cwd(), cwdRelative);
+  if (fs.existsSync(fromCwd)) return fromCwd.endsWith(path.sep) ? fromCwd : fromCwd + path.sep;
+  try {
+    return new URL(moduleRelative, import.meta.url).pathname;
+  } catch {
+    return fromCwd;
+  }
+}
 
 function num(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -19,10 +42,23 @@ function str(name: string, fallback = ''): string {
 const provider = (str('LLM_PROVIDER', 'ollama').toLowerCase() as 'ollama' | 'openai' | 'none');
 const validProvider = ['ollama', 'openai', 'none'].includes(provider) ? provider : 'ollama';
 
+/**
+ * Serverless (Vercel) mode.
+ *
+ * Two behaviours change, both because a function instance can vanish between
+ * requests:
+ *   - scans and fixes run inline and return their result, instead of returning a
+ *     job id that a different instance would not know about;
+ *   - bundled Demo Mode data is rebuilt from disk on demand instead of relying
+ *     on a warm process.
+ */
+const serverless = process.env.VERCEL === '1' || str('SERVERLESS') === '1';
+
 export const config = {
   port: num('PORT', 8787),
   nodeEnv: str('NODE_ENV', 'development'),
   isProduction: str('NODE_ENV') === 'production',
+  serverless,
 
   // GitHub OAuth app (optional).
   github: {
@@ -40,7 +76,8 @@ export const config = {
     openaiBaseUrl: str('OPENAI_BASE_URL', 'http://localhost:1234/v1').replace(/\/$/, ''),
     openaiApiKey: str('OPENAI_API_KEY'),
     jsonMode: str('LLM_JSON_MODE', 'true').toLowerCase() !== 'false',
-    timeoutMs: num('LLM_TIMEOUT_MS', 180_000),
+    // Per-file model timeout. A whole scan must never sit on one slow file.
+    timeoutMs: num('LLM_TIMEOUT_MS', 30_000),
   },
 
   scan: {
@@ -50,6 +87,15 @@ export const config = {
     maxFileBytes: num('SCAN_MAX_FILE_BYTES', 120_000),
     llmMaxFiles: num('LLM_MAX_FILES', 6),
     llmMaxFileChars: num('LLM_MAX_FILE_CHARS', 6000),
+    /** Total wall-clock budget for the AI review phase of one scan. */
+    llmBudgetMs: num('LLM_BUDGET_MS', 45_000),
+    /**
+     * Hard deadline for a whole scan. Serverless platforms cap a request at
+     * ~60s, so the default is shorter there.
+     */
+    timeoutMs: num('SCAN_TIMEOUT_MS', serverless ? 50_000 : 150_000),
+    /** How many files to download in parallel (GitHub allows this easily). */
+    fileConcurrency: num('SCAN_FILE_CONCURRENCY', 6),
   },
 
   safety: {
@@ -60,9 +106,9 @@ export const config = {
   },
 
   /** Absolute path to the prompts/ folder. */
-  promptsDir: str('PROMPTS_DIR') || new URL('../../prompts/', import.meta.url).pathname,
-  demoDir: new URL('../../demo/', import.meta.url).pathname,
-  webDistDir: new URL('../../web/dist/', import.meta.url).pathname,
+  promptsDir: resolveDir(str('PROMPTS_DIR'), 'prompts', '../../prompts/'),
+  demoDir: resolveDir(str('DEMO_DIR'), 'demo', '../../demo/'),
+  webDistDir: resolveDir(str('WEB_DIST_DIR'), 'web/dist', '../../web/dist/'),
 } as const;
 
 export function oauthAvailable(): boolean {

@@ -9,13 +9,15 @@
  */
 import { Router } from 'express';
 import { asyncHandler, HttpError, requireAuth } from '../http.js';
-import { getJob, runningJobsFor, startJob } from '../jobs.js';
+import { cancelJob, getJob, runningJobsFor, runJobNow, startJob } from '../jobs.js';
+import type { JobContext } from '../jobs.js';
 import { getSession, storeFix } from '../session.js';
 import { generateFix } from '../patch/generate.js';
 import { getFileWithSha } from '../github/client.js';
 import { cachedFixFor, cachedModelName } from '../demo/loader.js';
-import { getLLMProvider } from '../llm/index.js';
-import { getRememberedDemoFix, getRememberedDemoScan, rememberDemoFix } from '../demo/store.js';
+import { config } from '../config.js';
+import { getRememberedDemoFix, rememberDemoFix } from '../demo/store.js';
+import { resolveDemoFix, resolveDemoScan } from '../demo/rebuild.js';
 import type { FixResult, JobView } from '../types.js';
 
 export const fixRouter = Router();
@@ -35,7 +37,7 @@ fixRouter.post(
     const scanId = typeof body.scanId === 'string' ? body.scanId : '';
     const findingId = typeof body.findingId === 'string' ? body.findingId : '';
 
-    const record = session.scans.get(scanId) ?? getRememberedDemoScan(scanId) ?? undefined;
+    const record = session.scans.get(scanId) ?? (await resolveDemoScan(scanId)) ?? undefined;
     if (!record) {
       throw new HttpError(
         404,
@@ -61,7 +63,7 @@ fixRouter.post(
       );
     }
 
-    const jobId = startJob<FixResult>(session.id, STEPS, async (ctx) => {
+    const task = async (ctx: JobContext): Promise<FixResult> => {
       ctx.step('Locating the file');
 
       let beforeContent = record.files.find((file) => file.path === finding.file)?.content ?? null;
@@ -114,8 +116,25 @@ fixRouter.post(
       storeFix(session, fixRecord);
       if (record.scan.mode === 'demo') rememberDemoFix(fixRecord);
       return fixRecord.fix;
-    });
+    };
 
+    const jobOptions = {
+      timeoutMs: config.serverless ? 45_000 : 120_000,
+      timeoutMessage: 'Drafting and verifying this patch took longer than 2 minutes, so it was stopped.',
+      timeoutHint:
+        'Nothing was written to GitHub. A slow model endpoint is the usual cause — try a "Quick fix" card, which never needs a model.',
+    };
+
+    if (config.serverless) {
+      const jobRecord = await runJobNow<FixResult>(session.id, STEPS, task, jobOptions);
+      if (jobRecord.status === 'error') {
+        throw new HttpError(422, jobRecord.error ?? 'The patch could not be generated.', jobRecord.hint ?? undefined);
+      }
+      res.status(200).json({ jobId: jobRecord.id, result: jobRecord.result });
+      return;
+    }
+
+    const jobId = startJob<FixResult>(session.id, STEPS, task, jobOptions);
     res.status(202).json({ jobId });
   }),
 );
@@ -135,8 +154,20 @@ fixRouter.get(
       progress: job.progress,
       result: job.result,
       error: job.error,
+      hint: job.hint,
+      stalledForMs: job.status === 'running' ? Date.now() - job.lastProgressAt : 0,
     };
     res.json(view);
+  }),
+);
+
+fixRouter.post(
+  '/fix/:jobId/cancel',
+  asyncHandler(async (req, res) => {
+    const session = getSession(req);
+    const cancelled = cancelJob(req.params.jobId ?? '', session.id);
+    if (!cancelled) throw new HttpError(409, 'That fix already finished, so there was nothing to cancel.');
+    res.json({ cancelled: true });
   }),
 );
 
@@ -144,7 +175,10 @@ fixRouter.get(
   '/fix/result/:fixId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    const record = session.fixes.get(req.params.fixId ?? '') ?? getRememberedDemoFix(req.params.fixId ?? '');
+    const record =
+      session.fixes.get(req.params.fixId ?? '') ??
+      getRememberedDemoFix(req.params.fixId ?? '') ??
+      (await resolveDemoFix(req.params.fixId ?? ''));
     if (!record) {
       throw new HttpError(
         404,

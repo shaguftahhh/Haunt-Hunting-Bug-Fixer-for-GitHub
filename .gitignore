@@ -40,6 +40,9 @@ coverage/
 .vite/
 *.local
 
+# Vercel local state
+.vercel/
+
 # Editor files
 .vscode/*
 !.vscode/extensions.json

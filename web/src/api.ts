@@ -68,21 +68,49 @@ function rememberSessionId(id: string | null): void {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * Every request has a deadline.
+ *
+ * Without one a stalled server or a hanging proxy made the UI wait forever with
+ * no message — the "app is frozen" report. Now the wait is always bounded and
+ * the error says what happened.
+ */
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+interface RequestInitWithTimeout extends RequestInit {
+  timeoutMs?: number;
+}
+
+async function request<T>(path: string, init?: RequestInitWithTimeout): Promise<T> {
   const sessionId = readSessionId();
+  const timeoutMs = init?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const { timeoutMs: _ignored, ...rest } = init ?? {};
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
+
   try {
     res = await fetch(`/api${path}`, {
       credentials: 'same-origin',
+      ...rest,
       headers: {
         'Content-Type': 'application/json',
         ...(sessionId ? { [SESSION_HEADER]: sessionId } : {}),
-        ...(init?.headers ?? {}),
+        ...(rest.headers ?? {}),
       },
-      ...init,
+      signal: controller.signal,
     });
-  } catch {
-    throw new ApiError('Could not reach the BugBanisher server.', 0, 'Is `npm run dev` still running?');
+  } catch (error) {
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    throw new ApiError(
+      aborted ? 'The server did not answer in time.' : 'Could not reach the BugBanisher server.',
+      aborted ? 504 : 0,
+      aborted
+        ? 'The request was stopped after ' + Math.round(timeoutMs / 1000) + 's so the page would not hang. Try again.'
+        : 'Is `npm run dev` still running?',
+    );
+  } finally {
+    clearTimeout(timer);
   }
 
   rememberSessionId(res.headers.get(SESSION_HEADER));
@@ -136,23 +164,40 @@ export const api = {
       body: JSON.stringify({ dryRun }),
     }),
 
+  /**
+   * Starts a scan. On a long-lived server this returns a job id to poll; on a
+   * serverless deployment the scan finishes inside the request and `result` is
+   * already present, so the UI can skip polling entirely.
+   */
   startScan: (repoFullName: string) =>
-    request<{ jobId: string }>('/scan', {
+    request<{ jobId: string; result?: ScanResult }>('/scan', {
       method: 'POST',
       body: JSON.stringify({ repoFullName }),
     }),
 
   scanStatus: (jobId: string) => request<ScanJob>(`/scan/${encodeURIComponent(jobId)}`),
 
+  cancelScan: (jobId: string) =>
+    request<{ cancelled: boolean }>(`/scan/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+      body: '{}',
+    }),
+
   getScan: (scanId: string) => request<ScanResult>(`/scan/result/${encodeURIComponent(scanId)}`),
 
   startFix: (scanId: string, findingId: string) =>
-    request<{ jobId: string }>('/fix', {
+    request<{ jobId: string; result?: FixResult }>('/fix', {
       method: 'POST',
       body: JSON.stringify({ scanId, findingId }),
     }),
 
   fixStatus: (jobId: string) => request<FixJob>(`/fix/${encodeURIComponent(jobId)}`),
+
+  cancelFix: (jobId: string) =>
+    request<{ cancelled: boolean }>(`/fix/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+      body: '{}',
+    }),
 
   getFix: (fixId: string) => request<FixResult>(`/fix/result/${encodeURIComponent(fixId)}`),
 

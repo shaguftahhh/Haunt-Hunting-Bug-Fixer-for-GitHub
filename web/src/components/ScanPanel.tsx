@@ -49,6 +49,8 @@ export function ScanPanel({
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const [stalledFor, setStalledFor] = useState(0);
+  const [cancelling, setCancelling] = useState(false);
   const cancelled = useRef(false);
 
   useEffect(() => {
@@ -69,6 +71,7 @@ export function ScanPanel({
         setStep(job.step);
         setSteps(job.steps.length > 0 ? job.steps : FALLBACK_STEPS);
         setProgress(job.progress);
+        setStalledFor(job.stalledForMs ?? 0);
 
         if (job.status === 'done' && job.result) {
           setResult(job.result);
@@ -77,14 +80,24 @@ export function ScanPanel({
           return;
         }
         if (job.status === 'error') {
-          setError(new ApiError(job.error ?? 'The scan failed.', 500));
+          setError(new ApiError(job.error ?? 'The scan failed.', 500, job.hint ?? undefined));
           setPhase('error');
           return;
         }
         timer = setTimeout(poll, 800);
       } catch (err) {
         if (cancelled.current) return;
-        setError(err);
+        // A 404 means the in-memory job is gone: almost always a server restart
+        // during a dev session. Say that, instead of a bare "not found".
+        setError(
+          err instanceof ApiError && err.status === 404
+            ? new ApiError(
+                'The server restarted, so this scan was lost.',
+                404,
+                'Jobs live in memory only. Nothing was written to GitHub — run the scan again.',
+              )
+            : err,
+        );
         setPhase('error');
       }
     }
@@ -102,11 +115,41 @@ export function ScanPanel({
     setStep(FALLBACK_STEPS[0] ?? '');
     setSteps(FALLBACK_STEPS);
     try {
-      const { jobId: id } = await api.startScan(repo.fullName);
+      const { jobId: id, result: immediate } = await api.startScan(repo.fullName);
       setJobId(id);
+
+      // Serverless deployments return the finished scan in the same response.
+      if (immediate) {
+        setResult(immediate);
+        setProgress(100);
+        setStep('Done');
+        setPhase('done');
+        return;
+      }
     } catch (err) {
       setError(err);
       setPhase('error');
+    }
+  }
+
+  async function cancelScan() {
+    if (!jobId) return;
+    setCancelling(true);
+    try {
+      await api.cancelScan(jobId);
+      setPhase('error');
+      setError(
+        new ApiError(
+          'Scan cancelled.',
+          499,
+          'Nothing was written to GitHub. Start a new scan whenever you like.',
+        ),
+      );
+    } catch (err) {
+      setError(err);
+      setPhase('error');
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -114,6 +157,7 @@ export function ScanPanel({
     0,
     steps.findIndex((candidate) => candidate === step),
   );
+  const stalled = stalledFor > 45_000;
 
   return (
     <div className="stack">
@@ -163,7 +207,7 @@ export function ScanPanel({
               <div className="row" style={{ justifyContent: 'space-between' }}>
                 <span className="small">
                   <span className="spinner" aria-hidden="true" style={{ display: 'inline-block', marginRight: '0.5rem' }} />
-                  {step}
+                  Scanning — you can keep this tab in the background
                 </span>
                 <span className="small dim mono">{progress}%</span>
               </div>
@@ -202,6 +246,38 @@ export function ScanPanel({
             <p className="tiny dim" style={{ margin: 0 }}>
               Local models can take a while. The whole scan is read-only; you can leave this page and come back.
             </p>
+
+            {stalled ? (
+              <div className="alert alert--warn" role="status">
+                <span className="alert__icon" aria-hidden="true">⏳</span>
+                <div>
+                  <strong>This step is taking longer than usual.</strong> It has not moved for{' '}
+                  {Math.round(stalledFor / 1000)}s. Large repositories and slow model endpoints cause this —
+                  you can wait, or cancel and retry. Nothing is written to GitHub either way.
+                  <div style={{ marginTop: '0.6rem' }}>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      onClick={() => void cancelScan()}
+                      disabled={cancelling}
+                    >
+                      {cancelling ? 'Cancelling…' : 'Cancel scan'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="row">
+                <button
+                  type="button"
+                  className="btn btn--small btn--ghost"
+                  onClick={() => void cancelScan()}
+                  disabled={cancelling}
+                >
+                  {cancelling ? 'Cancelling…' : 'Cancel scan'}
+                </button>
+              </div>
+            )}
           </div>
         ) : null}
 

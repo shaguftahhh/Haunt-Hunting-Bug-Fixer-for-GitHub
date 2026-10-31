@@ -26,6 +26,8 @@ export async function reviewFilesWithLLM(
   repoFullName: string,
   files: RepoFile[],
   signal?: AbortSignal,
+  /** Wall-clock deadline for the whole review phase (ms since epoch). */
+  deadline?: number,
 ): Promise<LlmReviewResult> {
   const started = Date.now();
   const notes: string[] = [];
@@ -37,6 +39,15 @@ export async function reviewFilesWithLLM(
 
   for (const file of selected) {
     if (signal?.aborted) break;
+
+    // Stop cleanly when the review budget is spent: better a partial review
+    // with a note than a scan that looks frozen for minutes.
+    if (deadline !== undefined && Date.now() >= deadline) {
+      notes.push(
+        `Model review stopped after the ${Math.round(config.scan.llmBudgetMs / 1000)}s budget (LLM_BUDGET_MS); ${filesReviewed} of ${selected.length} files reviewed.`,
+      );
+      break;
+    }
 
     const { text, truncated } = withLineNumbers(file.content, config.scan.llmMaxFileChars);
     const lineCount = file.content.split('\n').length;

@@ -43,7 +43,10 @@ The invariants you must preserve:
 5. Secrets are never read, logged, displayed, prompted or committed.
 6. Nothing is written to GitHub without `confirm: true` from the approval dialog.
 7. Model output is always validated before it is used.
-8. Session continuity must survive blocked cookies: the cookie is primary, but the
+8. Every background job must have a deadline and be cancellable (`server/src/jobs.ts`), and no HTTP
+   handler may await a slow GitHub call before returning a job id. A spinner with no job id is the
+   "frozen app" bug from the field.
+9. Session continuity must survive blocked cookies: the cookie is primary, but the
    `X-BB-Session` header fallback must keep working (see `server/test/session.test.ts`).
 
 ---

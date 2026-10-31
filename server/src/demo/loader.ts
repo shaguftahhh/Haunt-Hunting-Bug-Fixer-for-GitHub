@@ -18,7 +18,13 @@ import { mechanicalFix } from '../patch/mechanical.js';
 import type { JobContext } from '../jobs.js';
 import { redactSecrets } from '../redaction.js';
 
-const noopContext: JobContext = { id: 'demo', step: () => {}, progress: () => {} };
+const noopContext: JobContext = {
+  id: 'demo',
+  signal: new AbortController().signal,
+  step: () => {},
+  progress: () => {},
+  checkpoint: () => {},
+};
 
 export interface CachedFinding {
   file: string;
@@ -202,7 +208,9 @@ export async function buildDemoBundle(): Promise<DemoBundle> {
     files,
     scan: {
       ...scan,
-      scanId: crypto.randomBytes(12).toString('base64url'),
+      // Stable id: the bundle is deterministic, so any instance (or a later
+      // request on a serverless cold start) can rebuild the exact same scan.
+      scanId: demoScanId(merged.map((finding) => finding.id)),
       findings: merged,
       stats: {
         ...scan.stats,
@@ -215,6 +223,12 @@ export async function buildDemoBundle(): Promise<DemoBundle> {
       createdAt: new Date().toISOString(),
     },
   };
+}
+
+/** Deterministic demo scan id, derived from the findings it contains. */
+export function demoScanId(findingIds: string[]): string {
+  const hash = crypto.createHash('sha256').update(findingIds.join('|')).digest('hex');
+  return `demo-${hash.slice(0, 16)}`;
 }
 
 export function cachedFixFor(findingId: string): CachedFix | null {
