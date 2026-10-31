@@ -103,6 +103,21 @@ the CDN and mounts the same Express app as a single serverless function
 npm run check:vercel     # emulates Vercel routing + two cold instances, then PASS/FAIL
 ```
 
+#### If the link shows `{"error":"No API route for GET /"}`
+
+That JSON comes from BugBanisher's own Express app, so the **API is deployed and the UI is not**.
+It means Vercel was pointed at the wrong folder, or deployed a commit without `vercel.json`:
+
+| What you see | Cause | Fix |
+| --- | --- | --- |
+| `{"error":"No API route for GET /","status":404}` | Project **Root Directory** is `server/`, so only the API is deployed and `vercel.json` is ignored | **Settings → General → Root Directory** → clear it (repository root) → redeploy |
+| Same JSON | The deployed commit predates `vercel.json` / `api/index.ts` | Deploy a commit that contains both |
+| Page loads but no styles/app | Output Directory or build command overridden in the dashboard | Use the values in `vercel.json` (`npm run build -w web`, `web/dist`) |
+
+`GET /api/health` now reports `ui: true|false` so you can tell in one request whether a deployment
+has a built frontend. If it is `false`, opening the site shows a styled setup page with these steps
+instead of raw JSON — the API keeps working meanwhile.
+
 What changes in serverless mode (`SERVERLESS=1`, set automatically by Vercel):
 
 | Behaviour | Long-lived server | Serverless |
@@ -352,6 +367,7 @@ bugbanisher/
 ├── server/
 │   └── src/
 │       ├── app.ts           # express app: security headers, API routes, static UI
+│       ├── setupPage.ts     # explains an API-only deployment instead of JSON 404
 │       ├── index.ts         # long-lived Node listener
 │       ├── config.ts        # env parsing (secrets never logged)
 │       ├── session.ts       # in-memory sessions, dry-run default, approval cap

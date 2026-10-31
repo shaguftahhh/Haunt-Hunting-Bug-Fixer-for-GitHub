@@ -25,6 +25,7 @@ import { fixRouter } from './routes/fix.js';
 import { approveRouter } from './routes/approve.js';
 import { demoRouter } from './routes/demo.js';
 import { modelRouter } from './routes/model.js';
+import { apiOnlyPage } from './setupPage.js';
 
 const app = express();
 
@@ -66,6 +67,9 @@ app.use((_req, res, next) => {
   next();
 });
 
+/** Whether a built frontend is available to this process (or deployment). */
+export const uiBuilt = (): boolean => fs.existsSync(path.join(config.webDistDir, 'index.html'));
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -73,6 +77,10 @@ app.get('/api/health', (_req, res) => {
     oauth: oauthAvailable(),
     llmProvider: config.llm.provider,
     version: '1.0.0',
+    // Deployment self-diagnosis: `ui: false` means this deployment has no built
+    // frontend, so opening the root URL can only show setup instructions.
+    ui: uiBuilt(),
+    serverless: config.serverless,
   });
 });
 
@@ -85,10 +93,21 @@ app.use('/api', demoRouter);
 app.use('/api', modelRouter);
 
 // In production we serve the built frontend from web/dist.
-if (fs.existsSync(config.webDistDir)) {
+if (uiBuilt()) {
   app.use(express.static(config.webDistDir, { index: false, maxAge: '1h' }));
   app.get(/^\/(?!api\/).*/, (_req, res) => {
     res.sendFile(path.join(config.webDistDir, 'index.html'));
+  });
+} else {
+  // A deployment without a frontend still works as an API, but a person opening
+  // the URL in a browser must not be met with raw JSON. Explain what happened and
+  // exactly how to fix it. (Happens when the Vercel project points its Root
+  // Directory at `server/`, or when the UI build was skipped.)
+  app.get(/^\/(?!api\/).*/, (req, res, next) => {
+    // API clients keep the JSON 404 below; only browsers get the explanation.
+    // (Returning without responding here would hang the request.)
+    if (!req.accepts('html')) return next();
+    res.status(200).type('html').send(apiOnlyPage({ serverless: config.serverless }));
   });
 }
 
