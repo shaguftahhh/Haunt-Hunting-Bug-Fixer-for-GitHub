@@ -6,15 +6,19 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
-import type { RepoSummary, ScanResult } from '../types';
+import type { ModelStatus, RepoSummary, ScanResult } from '../types';
 import { ErrorBanner } from './ErrorBanner';
 import { Ghost } from './Ghost';
-import { ArrowLeftIcon, BugIcon, CheckIcon, SparkIcon } from './Icons';
+import { ArrowLeftIcon, BugIcon, CheckIcon, SparkIcon, WrenchIcon } from './Icons';
+import { ModelStatusCard } from './ModelStatusCard';
+import { SUPPORTED_TYPES } from '../constants';
 
 interface ScanPanelProps {
   repo: RepoSummary;
   dryRun: boolean;
-  llm: { provider: string; model: string | null };
+  model: ModelStatus | null;
+  modelLoading: boolean;
+  onCheckModel: () => void;
   onBack: () => void;
   onScanned: (result: ScanResult) => void;
 }
@@ -29,7 +33,15 @@ const FALLBACK_STEPS = [
   'Scoring findings',
 ];
 
-export function ScanPanel({ repo, dryRun, llm, onBack, onScanned }: ScanPanelProps) {
+export function ScanPanel({
+  repo,
+  dryRun,
+  model,
+  modelLoading,
+  onCheckModel,
+  onBack,
+  onScanned,
+}: ScanPanelProps) {
   const [phase, setPhase] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [jobId, setJobId] = useState<string | null>(null);
   const [step, setStep] = useState('');
@@ -133,15 +145,7 @@ export function ScanPanel({ repo, dryRun, llm, onBack, onScanned }: ScanPanelPro
                 through the API, runs its checks, and asks the model to review the most suspicious files.
               </div>
             </div>
-            {llm.provider === 'none' || !llm.model ? (
-              <div className="alert alert--warn">
-                <span className="alert__icon" aria-hidden="true">⚠</span>
-                <div>
-                  <strong>No model configured.</strong> Set <code>LLM_PROVIDER=ollama</code> and pull a model
-                  to get AI explanations. Static checks still run.
-                </div>
-              </div>
-            ) : null}
+            <ModelStatusCard status={model} loading={modelLoading} onRefresh={onCheckModel} />
             <div className="row">
               <button type="button" className="btn btn--primary" onClick={() => void startScan()}>
                 <BugIcon size={16} /> Scan for bugs
@@ -232,18 +236,30 @@ export function ScanPanel({ repo, dryRun, llm, onBack, onScanned }: ScanPanelPro
                 <div className="stat__label">files scanned</div>
               </div>
               <div className="stat">
-                <div className="stat__value">{result.stats.filesSkipped}</div>
-                <div className="stat__label">files skipped</div>
+                <div className="stat__value">{result.findings.length}</div>
+                <div className="stat__label">bugs found</div>
               </div>
               <div className="stat">
-                <div className="stat__value">{result.stats.issuesRead}</div>
-                <div className="stat__label">bug issues</div>
+                <div className="stat__value">{result.stats.autoFixableCount}</div>
+                <div className="stat__label">quick fixes</div>
               </div>
               <div className="stat">
                 <div className="stat__value">{Math.round(result.stats.durationMs / 100) / 10}s</div>
                 <div className="stat__label">scan time</div>
               </div>
             </div>
+            {result.findings.length === 0 ? (
+              <div className="alert alert--warn">
+                <span className="alert__icon" aria-hidden="true">
+                  <WrenchIcon size={18} />
+                </span>
+                <div>
+                  <strong>Nothing matched in this repo.</strong> BugBanisher reads source files only
+                  ({SUPPORTED_TYPES}). Repos that are mostly docs, images or vendored code produce few
+                  findings. Try Demo Mode to see the full flow on a known-buggy sample.
+                </div>
+              </div>
+            ) : null}
             <div className="row">
               <button type="button" className="btn btn--primary" onClick={() => onScanned(result)}>
                 <BugIcon size={16} /> Open the Bug Board

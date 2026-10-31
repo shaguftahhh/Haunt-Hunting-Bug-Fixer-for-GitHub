@@ -93,8 +93,9 @@ approveRouter.post(
 
       const { token, login } = requireAuth(req);
 
-      if (scanRecord.repo.owner.toLowerCase() !== login.toLowerCase()) {
-        throw new HttpError(403, 'The connected account does not own this repository.');
+      const ownsRepo = scanRecord.repo.owner.toLowerCase() === login.toLowerCase();
+      if (!ownsRepo && scanRecord.repo.pushAccess !== true) {
+        throw new HttpError(403, 'The connected account has no write access to this repository.');
       }
       if (!fixRecord.fileSha) {
         throw new HttpError(409, 'Missing file version information. Regenerate the patch.');

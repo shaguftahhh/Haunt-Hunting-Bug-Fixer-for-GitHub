@@ -14,6 +14,7 @@ import { getSession, storeFix } from '../session.js';
 import { generateFix } from '../patch/generate.js';
 import { getFileWithSha } from '../github/client.js';
 import { cachedFixFor, cachedModelName } from '../demo/loader.js';
+import { getLLMProvider } from '../llm/index.js';
 import { getRememberedDemoFix, getRememberedDemoScan, rememberDemoFix } from '../demo/store.js';
 import type { FixResult, JobView } from '../types.js';
 

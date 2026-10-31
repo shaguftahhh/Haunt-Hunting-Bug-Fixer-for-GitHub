@@ -10,6 +10,7 @@ import type {
   FixResult,
   GitHubUser,
   JobView,
+  ModelStatus,
   PullRequestRecord,
   RepoSummary,
   ScanResult,
@@ -105,6 +106,7 @@ export interface SessionResponse extends SessionView {}
 export interface ReposResponse {
   login: string;
   repos: RepoSummary[];
+  includeWritable: boolean;
   note: string;
 }
 
@@ -123,7 +125,10 @@ export const api = {
 
   disconnect: () => request<SessionView>('/auth/logout', { method: 'POST' }),
 
-  repos: () => request<ReposResponse>('/repos'),
+  repos: (includeWritable = false) =>
+    request<ReposResponse>(`/repos${includeWritable ? '?includeWritable=1' : ''}`),
+
+  modelStatus: () => request<ModelStatus>('/model/status'),
 
   setDryRun: (dryRun: boolean) =>
     request<SessionView>('/settings/dry-run', {
@@ -173,4 +178,4 @@ export const api = {
     }>('/demo', { method: 'POST', body: JSON.stringify({}) }),
 };
 
-export type { Finding, FixResult, GitHubUser, PullRequestRecord, RepoSummary, ScanResult, SessionView };
+export type { Finding, FixResult, GitHubUser, ModelStatus, PullRequestRecord, RepoSummary, ScanResult, SessionView };

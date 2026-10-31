@@ -30,6 +30,8 @@ export interface RepoSummary {
   stars: number;
   updatedAt: string | null;
   htmlUrl: string;
+  /** The signed-in user has write access (true for owned and selected org repos). */
+  pushAccess?: boolean;
 }
 
 /** A single source file fetched during a scan. */
@@ -56,6 +58,10 @@ export interface Finding {
   snippet?: string;
   /** 1-based line number of the first line in `snippet`. */
   snippetStart?: number;
+  /** Plain-English "what to change" for this finding. */
+  fixHint?: string;
+  /** True when a deterministic patch exists (no model needed). */
+  autoFixAvailable?: boolean;
   ruleId?: string;
   issue?: { number: number; title: string; url: string; labels: string[] };
 }
@@ -68,6 +74,10 @@ export interface ScanStats {
   lintersDetected: string[];
   issuesRead: number;
   modelUsed: string | null;
+  /** Whether a model endpoint answered during this scan. */
+  modelAvailable: boolean;
+  /** Findings a deterministic patch can fix without a model. */
+  autoFixableCount: number;
   durationMs: number;
 }
 

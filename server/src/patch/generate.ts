@@ -12,13 +12,14 @@ import crypto from 'node:crypto';
 import type { Finding, FixResult, Mode, RepoSummary } from '../types.js';
 import type { JobContext } from '../jobs.js';
 import type { FixRecord } from '../types.js';
-import { getLLMProvider } from '../llm/index.js';
+import { checkLLMProvider, getLLMProvider } from '../llm/index.js';
 import { requestFix } from '../llm/fix.js';
 import { containsSecretLikeText, redactSecrets } from '../redaction.js';
 import { createUnifiedDiff } from './unifiedDiff.js';
 import { verifyPatch, type VerifyPatchOutcome } from './verify.js';
 import { mechanicalFix, type MechanicalResult } from './mechanical.js';
 import { HttpError } from '../http.js';
+import { config } from '../config.js';
 import { assertSafeBranch, buildPrDraft } from '../pr/draft.js';
 import { log } from '../logger.js';
 
@@ -56,6 +57,18 @@ export async function generateFix(input: GenerateFixInput, ctx: JobContext): Pro
   const ruleIsSecret = finding.ruleId ? SECRET_RULE_IDS.has(finding.ruleId) : false;
   // Demo Mode never calls a model: it replays cached responses instead.
   const allowModel = input.mode === 'github' && provider !== null && !fileLooksSecret && !ruleIsSecret;
+
+  // Health-check the endpoint first: without this, an unreachable Ollama looks
+  // like "the model produced a bad patch" and the user waits for a timeout.
+  let providerUsable = provider !== null;
+  let unreachableDetail = '';
+  if (provider && input.mode === 'github' && !fileLooksSecret && !ruleIsSecret) {
+    const health = await checkLLMProvider(provider);
+    if (!health.ok) {
+      providerUsable = false;
+      unreachableDetail = health.detail;
+    }
+  }
 
   let chosen: VerifyPatchOutcome | null = null;
   let diff = '';
@@ -151,14 +164,24 @@ export async function generateFix(input: GenerateFixInput, ctx: JobContext): Pro
   }
 
   if (!chosen || !chosen.after) {
+    // Structured failure so the UI can show the right next step instead of a
+    // dead end: no model reachable vs. model could not produce a safe patch.
+    const blockedBySecret = ruleIsSecret || fileLooksSecret;
+    const noModel = !blockedBySecret && (provider === null || !allowModel || !providerUsable);
+    const reason = blockedBySecret
+      ? 'BugBanisher will not send a credential-bearing file to a model, and this line has no safe automatic rewrite.'
+      : noModel
+        ? `This bug needs an AI model to draft the patch, and none is reachable right now.${unreachableDetail ? ` (${unreachableDetail})` : ''}`
+        : 'The model could not produce a patch that passes verification.';
+
     throw new HttpError(
       422,
-      lastFailure
-        ? `Could not produce a verified patch. ${lastFailure}`
-        : 'Could not produce a verified patch for this finding.',
-      provider === null
-        ? 'No model is configured and this rule has no safe mechanical fix. Start Ollama (LLM_PROVIDER=ollama) or pick a different finding.'
-        : 'Try a stronger model, or pick a different finding.',
+      reason,
+      blockedBySecret
+        ? 'Remove the credential by hand: move the value to an environment variable, rotate it, and load it at runtime.'
+        : noModel
+          ? `Start the local model, then press "Check model": ollama serve && ollama pull ${config.llm.model}. Findings marked "Quick fix" never need a model.`
+          : 'Try again, or pick a finding marked "Quick fix" — those are fixed deterministically without the model.',
     );
   }
 

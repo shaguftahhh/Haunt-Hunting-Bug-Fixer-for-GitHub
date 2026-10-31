@@ -15,6 +15,8 @@
  */
 import type { Severity } from '../types.js';
 import { languageOf } from './fileFilter.js';
+import { isIgnoreDirective } from './commentAwareness.js';
+import { buildLineStates, isCodeAt } from './lexer.js';
 
 export interface RuleMatch {
   ruleId: string;
@@ -24,6 +26,8 @@ export interface RuleMatch {
   confidence: number;
   explanation: string;
   whyItMatters: string;
+  /** Plain-English "what to change", shown on the Bug Board and fix screen. */
+  fixHint: string;
 }
 
 interface Rule {
@@ -348,8 +352,59 @@ const RULES: Rule[] = [
   },
 ];
 
+/**
+ * One-line remediation for each rule. This is what makes a finding actionable
+ * for a beginner: not only "what is wrong" but "what to type instead".
+ */
+const FIX_HINTS: Record<string, string> = {
+  'js/loose-equality': 'Use === (or !==) so both values must have the same type.',
+  'js/off-by-one': 'Change <= .length to < .length so the loop stops at the last valid index.',
+  'js/eval': 'Replace eval with JSON.parse for data, or a lookup object for behaviour.',
+  'js/innerhtml': 'Build nodes and set textContent, or sanitise the HTML before assigning it.',
+  'js/document-write': 'Render into a specific element with DOM APIs instead of document.write.',
+  'js/shell-interpolation': 'Pass arguments as an array to execFile/spawn instead of building a shell string.',
+  'js/assignment-in-condition': 'Use === in the condition, or move the assignment to its own line.',
+  'js/weak-random': 'Use crypto.randomUUID() or crypto.randomBytes() for tokens and ids.',
+  'js/json-parse': 'Wrap the parse in try/catch and return a 400 for malformed bodies.',
+  'js/empty-catch': 'Log the error or rethrow it; an empty catch hides the failure.',
+  'js/parseint-radix': 'Pass the base explicitly: parseInt(value, 10).',
+  'js/settimeout-string': 'Pass a function to setTimeout instead of a string of code.',
+  'js/debugger': 'Delete the debugger statement before shipping.',
+  'js/hardcoded-secret': 'Move the value to an environment variable and rotate the credential.',
+  'js/connection-string-credentials': 'Read the whole connection string from the environment and rotate the password.',
+  'py/bare-except': 'Catch the specific exception you can handle instead of a bare except.',
+  'py/except-pass': 'Handle the error meaningfully (log, retry, or raise) instead of pass.',
+  'py/eval-exec': 'Use ast.literal_eval for data or a dict of callables for dispatch.',
+  'py/shell-true': 'Pass an argument list and drop shell=True.',
+  'py/sql-fstring': 'Use a parameterised query (%s / ? placeholders) instead of an f-string.',
+  'py/mutable-default': 'Default to None and create the list/dict inside the function.',
+  'py/pickle-loads': 'Use JSON for untrusted data; never unpickle user input.',
+  'py/os-system': 'Use subprocess.run with an argument list.',
+  'py/eq-none': 'Compare with `is None` / `is not None`.',
+  'generic/private-key': 'Revoke and rotate this key, remove it from history, and load it from the environment.',
+};
+
+export function fixHintFor(ruleId: string): string {
+  return FIX_HINTS[ruleId] ?? 'Change the flagged line so the risky pattern is gone.';
+}
+
 export interface StaticScanOptions {
   maxFindingsPerFile?: number;
+}
+
+/**
+ * A rule only reports when its match is on real code: not a comment, not inside
+ * a string/template/regex literal, and not silenced by an ignore directive.
+ * `lineStates` makes multi-line constructs (block comments, template strings)
+ * accurate without re-scanning the whole file for every rule.
+ */
+function isRealCodeHit(
+  line: string,
+  matchIndex: number,
+  language: string,
+  state: { mode: string },
+): boolean {
+  return isCodeAt(line, matchIndex, state as never, language);
 }
 
 export function runStaticRules(
@@ -359,6 +414,8 @@ export function runStaticRules(
 ): RuleMatch[] {
   const language = languageOf(path);
   const lines = content.split('\n');
+  // One lexer pass per file: tells each rule whether a match sits in real code.
+  const lineStates = buildLineStates(lines, language);
   const matches: RuleMatch[] = [];
   const seen = new Set<string>();
   const maxFindings = options.maxFindingsPerFile ?? 8;
@@ -376,9 +433,16 @@ export function runStaticRules(
     lines.forEach((line, index) => {
       if (count >= (rule.maxPerFile ?? 1)) return;
       if (line.length > 500) return; // ignore minified-ish long lines
+      // Silence a finding when the line or the line above carries an ignore
+      // directive (`// eslint-disable-next-line`, `// bugbanisher:ignore`, `# noqa`).
+      if (isIgnoreDirective(line)) return;
+      const previous = lines[index - 1];
+      if (previous && isIgnoreDirective(previous)) return;
+
       regex.lastIndex = 0;
-      const hit = regex.test(line);
+      const hit = regex.exec(line);
       if (!hit) return;
+      if (!isRealCodeHit(line, hit.index, language, lineStates[index] ?? { mode: 'code' })) return;
       if (rule.lineOk && !rule.lineOk(line)) return;
       if (rule.contextOk && !rule.contextOk(lines, index)) return;
 
@@ -396,6 +460,7 @@ export function runStaticRules(
         confidence: rule.confidence,
         explanation: rule.explanation,
         whyItMatters: rule.whyItMatters,
+        fixHint: fixHintFor(rule.id),
       });
     });
 

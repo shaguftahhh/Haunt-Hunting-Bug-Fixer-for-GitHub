@@ -85,7 +85,10 @@ The invariants you must preserve:
    explanations. `maxPerFile` defaults to 1 — raise it only if the pattern is rare.
 3. Add a test in `server/test/scan.test.ts` with a small before/after example, including the expected
    line number.
-4. Run `npm test`.
+4. Run `npm test` — `server/test/accuracy.test.ts` is where precision regressions get caught. A rule
+   must not fire inside strings, template literals, regex literals, comments or Python docstrings
+   (the lexer in `server/src/scan/lexer.ts` handles that for you), and must include a `FIX_HINTS`
+   entry so every card can say **How to fix**.
 
 A rule is only useful if a beginner understands it: write `explanation` and `whyItMatters` for a
 person who has never seen the bug before.

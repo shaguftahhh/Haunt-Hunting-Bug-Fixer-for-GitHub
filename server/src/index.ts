@@ -20,6 +20,7 @@ import { scanRouter } from './routes/scan.js';
 import { fixRouter } from './routes/fix.js';
 import { approveRouter } from './routes/approve.js';
 import { demoRouter } from './routes/demo.js';
+import { modelRouter } from './routes/model.js';
 
 const app = express();
 
@@ -77,6 +78,7 @@ app.use('/api', scanRouter);
 app.use('/api', fixRouter);
 app.use('/api', approveRouter);
 app.use('/api', demoRouter);
+app.use('/api', modelRouter);
 
 // In production we serve the built frontend from web/dist.
 if (fs.existsSync(config.webDistDir)) {

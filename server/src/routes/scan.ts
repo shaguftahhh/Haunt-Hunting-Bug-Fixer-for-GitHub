@@ -48,21 +48,26 @@ scanRouter.post(
 
     const [owner, name] = repoFullName.split('/') as [string, string];
 
-    // Ownership check #1: the repo must be in the user's owned-repo list.
-    const owned = await listOwnedRepos(token, login);
-    const listed = owned.find((repo) => repo.fullName.toLowerCase() === repoFullName.toLowerCase());
+    // Access check #1: the repo must be in the user's own or writable list.
+    const accessible = await listOwnedRepos(token, login, { includeWritable: true });
+    const listed = accessible.find((repo) => repo.fullName.toLowerCase() === repoFullName.toLowerCase());
     if (!listed) {
       throw new HttpError(
         403,
-        'BugBanisher only scans repositories you own.',
+        'BugBanisher only scans repositories you own or can write to.',
         'If this is a fine-grained token, make sure this repository is included in its repository access list.',
       );
     }
 
-    // Ownership check #2: re-read the repo and confirm the owner literally is you.
+    // Access check #2: re-read the repo and confirm write access from GitHub itself.
     const repo = await getRepo(token, owner, name);
-    if (repo.owner.toLowerCase() !== login.toLowerCase()) {
-      throw new HttpError(403, 'That repository is not owned by your account.');
+    const ownsRepo = repo.owner.toLowerCase() === login.toLowerCase();
+    if (!ownsRepo && !repo.pushAccess) {
+      throw new HttpError(
+        403,
+        'That repository is not yours and you do not have write access.',
+        'Pick a repository from the list — BugBanisher never touches anything else.',
+      );
     }
 
     let files: RepoFile[] = [];

@@ -26,6 +26,7 @@ import { ScanPanel } from './components/ScanPanel';
 import { BugBoard } from './components/BugBoard';
 import { FixPanel } from './components/FixPanel';
 import { ApproveModal } from './components/ApproveModal';
+import { useModelStatus } from './useModelStatus';
 
 type View = 'connect' | 'repos' | 'scan' | 'board' | 'fix' | 'history';
 
@@ -41,6 +42,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [demoMode, setDemoMode] = useState(false);
   const [demoBusy, setDemoBusy] = useState(false);
+  const model = useModelStatus();
 
   // Load the session on first paint (and after an OAuth redirect).
   useEffect(() => {
@@ -210,11 +212,10 @@ export default function App() {
         ) : null}
 
         {!booting && demoMode ? (
-          <div className="demo-banner" style={{ marginBottom: '1rem' }}>
+          <div className="demo-banner" style={{ marginBottom: '0.9rem' }}>
             <span aria-hidden="true">👻</span>
             <span>
-              <strong>Demo Mode</strong> · bundled sample repo · cached model responses · always dry-run · no
-              internet needed
+              <strong>Demo Mode</strong> · sample repo · cached responses · always dry-run · works offline
             </span>
             <button type="button" className="btn btn--small" onClick={exitDemo}>
               Exit demo
@@ -254,6 +255,9 @@ export default function App() {
               onConnected={handleConnected}
               onStartDemo={() => void enterDemo()}
               demoBusy={demoBusy}
+              model={model.status}
+              modelLoading={model.loading}
+              onCheckModel={model.refresh}
             />
           </>
         ) : null}
@@ -270,7 +274,9 @@ export default function App() {
           <ScanPanel
             repo={repo}
             dryRun={session.dryRun}
-            llm={session.llm}
+            model={model.status}
+            modelLoading={model.loading}
+            onCheckModel={model.refresh}
             onBack={() => setView('repos')}
             onScanned={(result) => {
               setScan(result);
@@ -283,6 +289,7 @@ export default function App() {
           <BugBoard
             scan={scan}
             banished={banished}
+            model={demoMode ? { provider: 'cached', model: 'cached demo', ok: true, detail: 'Cached demo responses', setup: [] } : model.status}
             backLabel={demoMode ? 'Exit demo' : undefined}
             onBack={() => (demoMode ? exitDemo() : setView('scan'))}
             onRescan={() => (demoMode ? void enterDemo() : setView('scan'))}
@@ -297,6 +304,8 @@ export default function App() {
           <FixPanel
             scan={scan}
             finding={finding}
+            model={model.status}
+            onCheckModel={model.refresh}
             dryRun={demoMode ? true : session?.dryRun ?? true}
             approvals={session?.approvals ?? 0}
             approvalCap={session?.approvalCap ?? 3}
