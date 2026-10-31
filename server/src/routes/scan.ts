@@ -14,6 +14,7 @@ import { getJob, runningJobsFor, startJob } from '../jobs.js';
 import { getRepo, listOwnedRepos } from '../github/client.js';
 import { getSession, storeScan } from '../session.js';
 import { runScan } from '../scan/engine.js';
+import { getRememberedDemoScan } from '../demo/store.js';
 import type { JobView, RepoFile, ScanResult } from '../types.js';
 
 export const scanRouter = Router();
@@ -109,7 +110,8 @@ scanRouter.get(
   '/scan/result/:scanId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    const record = session.scans.get(req.params.scanId ?? '');
+    const record =
+      session.scans.get(req.params.scanId ?? '') ?? getRememberedDemoScan(req.params.scanId ?? '');
     if (!record) {
       throw new HttpError(
         404,

@@ -18,6 +18,20 @@ import type {
 import { config, publicRuntimeInfo } from './config.js';
 
 const SESSION_COOKIE = 'bb_sid';
+/**
+ * Cookie-independent continuation token.
+ *
+ * Why this exists: the app is often embedded in a preview iframe, and browsers
+ * block third-party cookies there. Without a fallback, every request would look
+ * like a brand new visitor and lose the scan/fix it just created.
+ *
+ * The cookie stays the primary mechanism (httpOnly, unreadable by scripts). The
+ * header is only echoed so the browser client can hold continuity when cookies
+ * are unavailable. It is the same unguessable 32-byte id, kept in memory for the
+ * page's lifetime (sessionStorage) and never written to disk.
+ */
+export const SESSION_HEADER = 'X-BB-Session';
+const SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{20,64}$/;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_SCANS_PER_SESSION = 2;
 const MAX_SESSIONS = 500;
@@ -72,9 +86,22 @@ declare global {
  * Attach (or create) a session for every request. Creating a session for an
  * anonymous visitor is harmless: it holds no token until they sign in.
  */
+/** Accept a session id only if it is well formed and still in memory. */
+function lookup(raw: unknown): SessionData | undefined {
+  if (typeof raw !== 'string' || !SESSION_ID_PATTERN.test(raw)) return undefined;
+  return sessions.get(raw);
+}
+
 export function sessionMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const raw = req.cookies?.[SESSION_COOKIE];
-  let session = typeof raw === 'string' ? sessions.get(raw) : undefined;
+  // Prefer the httpOnly cookie; fall back to the continuation header.
+  const fromCookie = lookup(req.cookies?.[SESSION_COOKIE]);
+  const fromHeader = fromCookie ? undefined : lookup(req.get(SESSION_HEADER));
+  let session = fromCookie ?? fromHeader;
+
+  if (fromCookie && req.get(SESSION_HEADER) && req.get(SESSION_HEADER) !== fromCookie.id) {
+    // A stale header must not override a valid cookie.
+    res.setHeader(SESSION_HEADER, fromCookie.id);
+  }
 
   if (!session) {
     // Bound memory for long-running demos: evict the least recently seen
@@ -95,6 +122,12 @@ export function sessionMiddleware(req: Request, res: Response, next: NextFunctio
   }
 
   session.lastSeen = Date.now();
+
+  // Always echo the id so a cookie-less client (sandboxed iframe) can continue
+  // the same session on its next request.
+  if (!res.getHeader(SESSION_HEADER)) res.setHeader(SESSION_HEADER, session.id);
+  if (req.path.startsWith('/api')) res.setHeader('Cache-Control', 'no-store');
+
   req.session = session;
   next();
 }

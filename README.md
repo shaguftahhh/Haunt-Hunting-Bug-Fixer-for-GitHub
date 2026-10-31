@@ -321,7 +321,7 @@ bugbanisher/
 ## Testing
 
 ```bash
-npm test                 # 34 tests: scanner, diff engine, verification, demo, UI render
+npm test                 # 39 tests: scanner, diff engine, verification, demo, sessions, UI render
 npm run typecheck        # strict TypeScript for server and web
 npm run build            # production build of both workspaces
 
@@ -354,7 +354,8 @@ are refused, and the demo's cached patches pass the same verifier as real ones.
 - **The `ai-assisted` label needs Issues permission.** With the recommended minimal token it usually
   cannot be added; the PR body always contains the disclosure.
 - **In-memory sessions.** Restarting the server forgets tokens, scans and patches (by design). A
-  session lives for 12 hours of inactivity.
+  session lives for 12 hours of inactivity. Bundled Demo Mode scans are the one exception: they are
+  public sample data and are cached server-side so the demo survives a dropped session.
 - **Caps are per browser session.** Disconnecting and reconnecting starts a new session; the cap is a
   guardrail against automation, not a billing meter.
 - **Large repos are sampled.** Up to 25 files are scanned, up to 6 go to the model.
@@ -365,6 +366,11 @@ are refused, and the demo's cached patches pass the same verifier as real ones.
 
 - The GitHub token is stored in a server-side `Map` keyed by a random httpOnly session cookie. It is
   never written to disk, never logged, and never sent to the browser.
+- When the browser blocks that cookie (preview iframes, strict third-party-cookie settings) the client
+  continues the same session with the `X-BB-Session` response header, kept in `sessionStorage` for the
+  tab's lifetime. It is the same unguessable id, not a token or credential, and it is never written to
+  disk. Demo Mode additionally keeps bundled scans in a small server-side cache so a demo can never
+  dead-end mid-presentation.
 - All model calls happen server-side. Files are filtered (no `.env`, no keys, no binaries) and
   redacted before they are used in snippets or displayed diffs.
 - Logs pass through `redact()`; GitHub error messages are returned without headers.

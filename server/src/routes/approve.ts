@@ -26,6 +26,7 @@ import {
   openPullRequest,
 } from '../github/client.js';
 import { assertSafeBranch } from '../pr/draft.js';
+import { getRememberedDemoFix, getRememberedDemoScan } from '../demo/store.js';
 import { log } from '../logger.js';
 import type { PullRequestRecord } from '../types.js';
 
@@ -42,13 +43,14 @@ approveRouter.post(
       throw new HttpError(400, 'Approval must be explicit. Open the confirmation dialog and click "Open Pull Request".');
     }
 
-    const fixRecord = session.fixes.get(fixId);
+    const fixRecord = session.fixes.get(fixId) ?? getRememberedDemoFix(fixId) ?? undefined;
     if (!fixRecord) {
       throw new HttpError(404, 'That patch is no longer in memory. Generate it again.');
     }
     const fix = fixRecord.fix;
 
-    const scanRecord = session.scans.get(fixRecord.scanId);
+    const scanRecord =
+      session.scans.get(fixRecord.scanId) ?? getRememberedDemoScan(fixRecord.scanId) ?? undefined;
     if (!scanRecord) throw new HttpError(404, 'The scan behind this patch has expired. Rescan and regenerate.');
 
     if (!fix.verified) {
