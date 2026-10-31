@@ -87,7 +87,17 @@ export function ScanPanel({
         timer = setTimeout(poll, 800);
       } catch (err) {
         if (cancelled.current) return;
-        setError(err);
+        // A 404 means the in-memory job is gone: almost always a server restart
+        // during a dev session. Say that, instead of a bare "not found".
+        setError(
+          err instanceof ApiError && err.status === 404
+            ? new ApiError(
+                'The server restarted, so this scan was lost.',
+                404,
+                'Jobs live in memory only. Nothing was written to GitHub — run the scan again.',
+              )
+            : err,
+        );
         setPhase('error');
       }
     }

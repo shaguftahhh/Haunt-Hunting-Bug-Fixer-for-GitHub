@@ -10,6 +10,7 @@
  * "running", progress never moved, and nothing ever told the user why.
  */
 import crypto from 'node:crypto';
+import { HttpError } from './http.js';
 import { log } from './logger.js';
 
 export interface JobRecord<T = unknown> {
@@ -162,6 +163,9 @@ export function startJob<T>(
       const message = error instanceof Error ? error.message : String(error);
       record.status = 'error';
       record.error = message;
+      // A 403/404 raised inside a job carries the same guidance as an HTTP
+      // error, so the UI can show "what to do next" instead of just a title.
+      if (error instanceof HttpError && error.hint) record.hint = error.hint;
       record.updatedAt = Date.now();
       finish(id);
       log.warn('Background job failed', { id, message });
