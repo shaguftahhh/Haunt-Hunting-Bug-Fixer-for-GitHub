@@ -64,6 +64,7 @@ npm run dev                 # API on :8787, web app on :5173
 ```
 
 Open **http://localhost:5173**.
+https://haunt-hunting-bug-fixer-for-github-brown.vercel.app
 
 The two dev servers run together (`concurrently`). Vite proxies `/api` to the Express server, so the
 browser only ever talks to one origin and never sees a GitHub token.
