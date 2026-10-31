@@ -89,8 +89,11 @@ export interface FixResult {
   generatedBy: 'llm' | 'mechanical' | 'cached';
   model: string | null;
   filesChanged: string[];
-  bannedIssuesBefore: number;
-  bannedIssuesAfter: number;
+  /** Static findings in the file before/after the patch. */
+  staticFindingsBefore: number;
+  staticFindingsAfter: number;
+  /** True when credential values were masked in the displayed diff. */
+  diffRedacted: boolean;
 }
 
 export interface PullRequestRecord {

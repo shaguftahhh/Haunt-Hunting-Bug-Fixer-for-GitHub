@@ -17,6 +17,7 @@ import { sessionMiddleware } from './session.js';
 import { authRouter } from './routes/auth.js';
 import { settingsRouter } from './routes/settings.js';
 import { scanRouter } from './routes/scan.js';
+import { fixRouter } from './routes/fix.js';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api', authRouter);
 app.use('/api', settingsRouter);
 app.use('/api', scanRouter);
+app.use('/api', fixRouter);
 
 // In production we serve the built frontend from web/dist.
 if (fs.existsSync(config.webDistDir)) {

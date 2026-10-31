@@ -24,7 +24,7 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { ScanPanel } from './components/ScanPanel';
 import { BugBoard } from './components/BugBoard';
 import { FixPanel } from './components/FixPanel';
-import type { Finding, ScanResult } from './types';
+import type { Finding, FixResult, ScanResult } from './types';
 
 type View = 'connect' | 'repos' | 'scan' | 'board' | 'fix' | 'history';
 
@@ -36,7 +36,6 @@ export default function App() {
   const [repo, setRepo] = useState<RepoSummary | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [finding, setFinding] = useState<Finding | null>(null);
-  const [banished, setBanished] = useState<Set<string>>(new Set());
   const [notice, setNotice] = useState<string | null>(null);
 
   // Load the session on first paint (and after an OAuth redirect).
@@ -206,7 +205,6 @@ export default function App() {
         {!booting && connected && view === 'board' && scan ? (
           <BugBoard
             scan={scan}
-            banished={banished}
             onBack={() => setView('scan')}
             onRescan={() => setView('scan')}
             onPickFix={(picked) => {
@@ -224,15 +222,8 @@ export default function App() {
             approvals={session?.approvals ?? 0}
             approvalCap={session?.approvalCap ?? 3}
             onBack={() => setView('board')}
-            onOpened={(updatedSession, message) => {
-              setSession(updatedSession);
-              setBanished((previous) => {
-                const next = new Set(previous);
-                next.add(finding.id);
-                return next;
-              });
-              setNotice(message);
-              setView('board');
+            onApprove={(fix: FixResult) => {
+              setNotice(`Patch ${fix.fixId} is verified. The approval step arrives in the next phase.`);
             }}
           />
         ) : null}
