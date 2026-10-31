@@ -14,6 +14,7 @@ import { ArrowLeftIcon, BookIcon, BugIcon, GitHubIcon, SparkIcon, WrenchIcon } f
 interface BugBoardProps {
   scan: ScanResult;
   banished?: Set<string>;
+  backLabel?: string;
   onBack: () => void;
   onRescan: () => void;
   onPickFix: (finding: Finding) => void;
@@ -28,7 +29,9 @@ const SOURCE_LABEL: Record<Finding['source'], string> = {
 };
 
 function codeHref(scan: ScanResult, finding: Finding): string | null {
-  if (finding.source === 'issue' || !finding.file.includes('.')) return null;
+  // Demo Mode has no GitHub repository, so there is nothing to link to.
+  if (scan.mode === 'demo' || finding.source === 'issue' || !finding.file.includes('.')) return null;
+  if (!scan.repo.htmlUrl) return null;
   return `${scan.repo.htmlUrl}/blob/${scan.repo.defaultBranch}/${finding.file}#L${finding.line}`;
 }
 
@@ -73,7 +76,7 @@ function Confidence({ value }: { value: number }) {
   );
 }
 
-export function BugBoard({ scan, banished, onBack, onRescan, onPickFix }: BugBoardProps) {
+export function BugBoard({ scan, banished, backLabel, onBack, onRescan, onPickFix }: BugBoardProps) {
   const [severity, setSeverity] = useState<'all' | Severity>('all');
   const [source, setSource] = useState<'all' | 'static' | 'llm' | 'issue'>('all');
   const [query, setQuery] = useState('');
@@ -115,7 +118,7 @@ export function BugBoard({ scan, banished, onBack, onRescan, onPickFix }: BugBoa
           </div>
           <div className="row">
             <button type="button" className="btn btn--small" onClick={onBack}>
-              <ArrowLeftIcon size={16} /> Change repo
+              <ArrowLeftIcon size={16} /> {backLabel ?? 'Change repo'}
             </button>
             <button type="button" className="btn btn--small btn--ghost" onClick={onRescan}>
               Rescan
@@ -234,7 +237,11 @@ export function BugBoard({ scan, banished, onBack, onRescan, onPickFix }: BugBoa
                 <div className="finding-card__top">
                   <span className={`badge badge--${finding.severity}`}>{SEVERITY_LABEL[finding.severity]}</span>
                   <span className="badge badge--muted">{SOURCE_LABEL[finding.source]}</span>
-                  {isBanished ? <span className="badge badge--ghost">✓ banished</span> : null}
+                  {isBanished ? (
+                    <span className="badge badge--ghost">
+                      <span aria-hidden="true">✦</span> banished
+                    </span>
+                  ) : null}
                   <span className="finding-card__where">
                     {finding.source === 'issue' ? finding.file : `${finding.file}:${finding.line}`}
                   </span>
@@ -253,9 +260,13 @@ export function BugBoard({ scan, banished, onBack, onRescan, onPickFix }: BugBoa
 
                 {finding.source === 'issue' && finding.issue ? (
                   <p className="small" style={{ marginBottom: '0.6rem' }}>
-                    <a href={finding.issue.url} target="_blank" rel="noreferrer">
-                      <GitHubIcon size={14} /> Issue #{finding.issue.number} on GitHub
-                    </a>{' '}
+                    {finding.issue.url ? (
+                      <a href={finding.issue.url} target="_blank" rel="noreferrer">
+                        <GitHubIcon size={14} /> Issue #{finding.issue.number} on GitHub
+                      </a>
+                    ) : (
+                      <span className="mono">issue #{finding.issue.number} (bundled demo issue)</span>
+                    )}{' '}
                     <span className="dim">· labels: {finding.issue.labels.join(', ') || 'none'}</span>
                   </p>
                 ) : (

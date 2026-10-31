@@ -31,6 +31,14 @@ export interface GenerateFixInput {
   beforeContent: string;
   fileSha?: string;
   signal?: AbortSignal;
+  /** Demo Mode: a pre-recorded response, still verified before use. */
+  cachedFix?: {
+    summary: string;
+    testPlan: string;
+    prTitle: string;
+    diff: string;
+    model: string;
+  } | null;
 }
 
 export interface GeneratedFix {
@@ -46,14 +54,15 @@ export async function generateFix(input: GenerateFixInput, ctx: JobContext): Pro
 
   const fileLooksSecret = containsSecretLikeText(beforeContent);
   const ruleIsSecret = finding.ruleId ? SECRET_RULE_IDS.has(finding.ruleId) : false;
-  const allowModel = provider !== null && !fileLooksSecret && !ruleIsSecret;
+  // Demo Mode never calls a model: it replays cached responses instead.
+  const allowModel = input.mode === 'github' && provider !== null && !fileLooksSecret && !ruleIsSecret;
 
   let chosen: VerifyPatchOutcome | null = null;
   let diff = '';
   let summary = '';
   let testPlan = '';
   let prTitle = '';
-  let generatedBy: 'llm' | 'mechanical' = 'mechanical';
+  let generatedBy: 'llm' | 'mechanical' | 'cached' = 'mechanical';
   let model: string | null = null;
   let lastFailure: string | null = null;
 
@@ -63,8 +72,27 @@ export async function generateFix(input: GenerateFixInput, ctx: JobContext): Pro
     return verifyPatch({ path, before: beforeContent, diff: mechanicalDiff, finding });
   };
 
+  // ------------------------------------------------------- cached demo reply
+  if (input.mode === 'demo' && input.cachedFix) {
+    ctx.step('Replaying the cached patch');
+    const candidate = input.cachedFix;
+    const outcome = verifyPatch({ path, before: beforeContent, diff: candidate.diff, finding });
+    if (outcome.verified) {
+      chosen = outcome;
+      diff = candidate.diff;
+      summary = candidate.summary;
+      testPlan = candidate.testPlan;
+      prTitle = candidate.prTitle;
+      generatedBy = 'cached';
+      model = candidate.model;
+    } else {
+      lastFailure = `The cached patch no longer applies: ${outcome.failure ?? 'verification failed'}`;
+      log.warn('Cached demo patch failed verification', { path, failure: lastFailure });
+    }
+  }
+
   // ---------------------------------------------------------------- the model
-  if (allowModel && provider) {
+  if (!chosen && allowModel && provider) {
     ctx.step('Drafting a minimal patch');
     for (let attempt = 0; attempt < 2 && !chosen; attempt += 1) {
       try {

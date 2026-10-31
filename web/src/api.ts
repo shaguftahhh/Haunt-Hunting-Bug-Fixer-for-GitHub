@@ -113,7 +113,12 @@ export const api = {
   getFix: (fixId: string) => request<FixResult>(`/fix/result/${encodeURIComponent(fixId)}`),
 
   approve: (fixId: string) =>
-    request<{ record: PullRequestRecord; session: SessionView; labelApplied: boolean }>('/approve', {
+    request<{
+      record: PullRequestRecord;
+      session: SessionView;
+      labelApplied: boolean;
+      note: string;
+    }>('/approve', {
       method: 'POST',
       body: JSON.stringify({ fixId, confirm: true }),
     }),

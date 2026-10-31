@@ -2,11 +2,9 @@
  * Session settings: the dry-run switch and the History tab.
  */
 import { Router } from 'express';
-import { getSession, sessionView, addHistory } from '../session.js';
+import { getSession, sessionView } from '../session.js';
 import { HttpError } from '../http.js';
 import { config } from '../config.js';
-import type { PullRequestRecord } from '../types.js';
-
 export const settingsRouter = Router();
 
 /**
@@ -34,21 +32,3 @@ settingsRouter.get('/history', (req, res) => {
   });
 });
 
-/**
- * POST /api/history/:id/discard — remove a dry-run entry from the list.
- * Real PRs are never deleted from GitHub; this only tidies the local list.
- */
-settingsRouter.delete('/history/:id', (req, res) => {
-  const session = getSession(req);
-  const before = session.history.length;
-  session.history = session.history.filter((entry) => entry.id !== req.params.id);
-  if (session.history.length === before) throw new HttpError(404, 'No such history entry.');
-  res.status(204).end();
-});
-
-export function historyEntry(entry: PullRequestRecord): PullRequestRecord {
-  return entry;
-}
-
-// Re-export so route modules can build entries with the same shape.
-export { addHistory };

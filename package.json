@@ -14,10 +14,13 @@
     "start": "node server/dist/index.js",
     "serve": "npm run build && npm start",
     "typecheck": "npm run typecheck -w server && npm run typecheck -w web",
-    "test": "npm test -w server"
+    "test": "npm test -w server && npm test -w web",
+    "demo:cache": "tsx scripts/build-demo-cache.mts",
+    "scan:sample": "tsx scripts/scan-sample.mts"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.2"
   },
   "engines": {
     "node": ">=20"

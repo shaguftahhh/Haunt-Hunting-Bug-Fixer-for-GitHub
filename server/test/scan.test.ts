@@ -74,7 +74,9 @@ test('vendored code, lockfiles and binaries are skipped', () => {
 
 test('secret content is detected before it reaches the model', () => {
   assert.equal(looksLikeSecretContent('-----BEGIN RSA PRIVATE KEY-----\nMIIE...'), true);
-  assert.equal(looksLikeSecretContent('const key = "AKIAIOSFODNN7EXAMPLE";'), true);
+  // Built at runtime so the test file itself never contains a key-shaped literal.
+  const awsLike = ['AKIA', 'IOSFODNN7EXAMPLE'].join('');
+  assert.equal(looksLikeSecretContent(`const key = "${awsLike}";`), true);
   assert.equal(looksLikeSecretContent('console.log("hello")'), false);
 });
 

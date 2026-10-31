@@ -89,7 +89,6 @@ scanRouter.get(
   '/scan/:jobId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    requireAuth(req);
     const job = getJob<ScanResult>(req.params.jobId ?? '', session.id);
     if (!job) throw new HttpError(404, 'That scan job does not exist (or belongs to another session).');
 
@@ -110,7 +109,6 @@ scanRouter.get(
   '/scan/result/:scanId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    requireAuth(req);
     const record = session.scans.get(req.params.scanId ?? '');
     if (!record) {
       throw new HttpError(

@@ -19,9 +19,11 @@ import { CheckIcon, GitHubIcon, KeyIcon, ShieldIcon, XIcon } from './Icons';
 interface ConnectPanelProps {
   oauthAvailable: boolean;
   onConnected: (session: ConnectResponse) => void;
+  onStartDemo: () => void;
+  demoBusy: boolean;
 }
 
-export function ConnectPanel({ oauthAvailable, onConnected }: ConnectPanelProps) {
+export function ConnectPanel({ oauthAvailable, onConnected, onStartDemo, demoBusy }: ConnectPanelProps) {
   const [tab, setTab] = useState<'pat' | 'oauth'>(oauthAvailable ? 'pat' : 'pat');
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
@@ -223,8 +225,12 @@ export function ConnectPanel({ oauthAvailable, onConnected }: ConnectPanelProps)
         </ul>
 
         <hr className="divider" />
-        <p className="tiny dim" style={{ margin: 0 }}>
-          Read-only until you approve. Dry-run is ON by default, and only 3 PRs can be opened per session.
+        <button type="button" className="btn btn--ghost btn--block" onClick={onStartDemo} disabled={demoBusy}>
+          {demoBusy ? <span className="spinner" aria-hidden="true" /> : '👻'} Explore Demo Mode (works offline)
+        </button>
+        <p className="tiny dim" style={{ marginTop: '0.6rem', marginBottom: 0 }}>
+          The demo uses a bundled sample repo with four planted bugs and cached model responses. It needs no
+          GitHub account, no model and no internet.
         </p>
       </aside>
     </div>

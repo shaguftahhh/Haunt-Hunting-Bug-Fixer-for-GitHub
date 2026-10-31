@@ -13,6 +13,7 @@ import { getJob, runningJobsFor, startJob } from '../jobs.js';
 import { getSession, storeFix } from '../session.js';
 import { generateFix } from '../patch/generate.js';
 import { getFileWithSha } from '../github/client.js';
+import { cachedFixFor, cachedModelName } from '../demo/loader.js';
 import type { FixResult, JobView } from '../types.js';
 
 export const fixRouter = Router();
@@ -86,6 +87,14 @@ fixRouter.post(
       }
 
       ctx.step('Drafting a minimal patch');
+      const cached =
+        record.scan.mode === 'demo'
+          ? (() => {
+              const reply = cachedFixFor(finding.id);
+              return reply ? { ...reply, model: `${cachedModelName()} (cached)` } : null;
+            })()
+          : null;
+
       const { record: fixRecord } = await generateFix(
         {
           scanId,
@@ -95,6 +104,7 @@ fixRouter.post(
           path: finding.file,
           beforeContent,
           fileSha,
+          cachedFix: cached,
         },
         ctx,
       );
@@ -111,7 +121,6 @@ fixRouter.get(
   '/fix/:jobId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    requireAuth(req);
     const job = getJob<FixResult>(req.params.jobId ?? '', session.id);
     if (!job) throw new HttpError(404, 'That fix job does not exist (or belongs to another session).');
 
@@ -132,7 +141,6 @@ fixRouter.get(
   '/fix/result/:fixId',
   asyncHandler(async (req, res) => {
     const session = getSession(req);
-    requireAuth(req);
     const record = session.fixes.get(req.params.fixId ?? '');
     if (!record) {
       throw new HttpError(

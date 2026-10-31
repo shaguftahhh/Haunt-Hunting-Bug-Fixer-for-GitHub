@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "issues": [
+    {
+      "number": 42,
+      "title": "Checkout totals show NaN for the last order",
+      "body": "Reported by a mailroom operator: when a cart has more than one order, the checkout total shows NaN. It looks like the last order is being counted twice or read after the end of the list.",
+      "htmlUrl": "",
+      "labels": [
+        "bug",
+        "checkout"
+      ]
+    }
+  ]
+}

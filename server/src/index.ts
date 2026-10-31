@@ -18,6 +18,8 @@ import { authRouter } from './routes/auth.js';
 import { settingsRouter } from './routes/settings.js';
 import { scanRouter } from './routes/scan.js';
 import { fixRouter } from './routes/fix.js';
+import { approveRouter } from './routes/approve.js';
+import { demoRouter } from './routes/demo.js';
 
 const app = express();
 
@@ -25,6 +27,25 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
 app.use(cookieParser());
 app.use(sessionMiddleware);
+
+// CSRF hardening: state-changing requests that carry an Origin must come from
+// this same origin. (Cookies are also SameSite=Lax.)
+app.use((req, res, next) => {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  const origin = req.get('origin');
+  if (!origin) return next();
+  const host = req.get('host');
+  try {
+    if (new URL(origin).host !== host) {
+      res.status(403).json({ error: 'Cross-origin writes are not allowed.', status: 403 });
+      return;
+    }
+  } catch {
+    res.status(403).json({ error: 'Invalid Origin header.', status: 403 });
+    return;
+  }
+  next();
+});
 
 // Basic security headers. No third-party scripts, no inline eval.
 app.use((_req, res, next) => {
@@ -52,6 +73,8 @@ app.use('/api', authRouter);
 app.use('/api', settingsRouter);
 app.use('/api', scanRouter);
 app.use('/api', fixRouter);
+app.use('/api', approveRouter);
+app.use('/api', demoRouter);
 
 // In production we serve the built frontend from web/dist.
 if (fs.existsSync(config.webDistDir)) {

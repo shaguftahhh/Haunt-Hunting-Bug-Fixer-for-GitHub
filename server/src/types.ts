@@ -114,6 +114,8 @@ export interface FixResult {
 export interface PullRequestRecord {
   id: string;
   mode: Mode;
+  fixId: string;
+  findingId: string;
   repoFullName: string;
   number: number | null;
   title: string;

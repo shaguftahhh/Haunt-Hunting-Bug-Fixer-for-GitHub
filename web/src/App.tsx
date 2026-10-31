@@ -2,19 +2,20 @@
  * App shell and view state machine.
  *
  * Views:
- *   connect  → GitHub not connected yet
+ *   connect  → GitHub not connected yet (or Demo Mode entry point)
  *   repos    → choose ONE owned repository
- *   scan     → scanning in progress / scan results intro
- *   fix      → patch preview for a chosen finding
- *   history  → PRs opened this session
+ *   scan     → scanning a real repo
+ *   board    → Bug Board (real scan or offline demo)
+ *   fix      → verified patch preview
+ *   history  → approvals / PRs from this session
  *
  * The GitHub token never reaches this file: the browser only holds a session
  * cookie, and all GitHub calls happen on the server.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import type { ConnectResponse } from './api';
-import type { RepoSummary, SessionView } from './types';
+import type { Finding, FixResult, RepoSummary, ScanResult, SessionView } from './types';
 import { Header } from './components/Header';
 import { ConnectPanel } from './components/ConnectPanel';
 import { RepoPicker } from './components/RepoPicker';
@@ -24,7 +25,7 @@ import { HistoryPanel } from './components/HistoryPanel';
 import { ScanPanel } from './components/ScanPanel';
 import { BugBoard } from './components/BugBoard';
 import { FixPanel } from './components/FixPanel';
-import type { Finding, FixResult, ScanResult } from './types';
+import { ApproveModal } from './components/ApproveModal';
 
 type View = 'connect' | 'repos' | 'scan' | 'board' | 'fix' | 'history';
 
@@ -36,7 +37,10 @@ export default function App() {
   const [repo, setRepo] = useState<RepoSummary | null>(null);
   const [scan, setScan] = useState<ScanResult | null>(null);
   const [finding, setFinding] = useState<Finding | null>(null);
+  const [pendingFix, setPendingFix] = useState<FixResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoBusy, setDemoBusy] = useState(false);
 
   // Load the session on first paint (and after an OAuth redirect).
   useEffect(() => {
@@ -63,6 +67,10 @@ export default function App() {
   }
 
   async function toggleDryRun(next: boolean) {
+    if (demoMode && !next) {
+      setNotice('Demo Mode is always a dry run. Exit demo mode to change the dry-run setting for real repos.');
+      return;
+    }
     try {
       const updated = await api.setDryRun(next);
       setSession(updated);
@@ -83,6 +91,8 @@ export default function App() {
       setRepo(null);
       setScan(null);
       setFinding(null);
+      setPendingFix(null);
+      setDemoMode(false);
       setView('connect');
       setNotice('Disconnected. The token was dropped from server memory.');
     } catch (err) {
@@ -90,8 +100,46 @@ export default function App() {
     }
   }
 
+  /** Load the bundled sample repo. No GitHub, no model, no network. */
+  async function enterDemo() {
+    setDemoBusy(true);
+    setBootError(null);
+    try {
+      const demo = await api.demo();
+      const fresh = await api.session();
+      setSession(fresh);
+      setDemoMode(true);
+      setRepo(demo.repo);
+      setScan(demo.scan);
+      setFinding(null);
+      setPendingFix(null);
+      setView('board');
+      setNotice(
+        'Demo Mode: bundled sample repo with four planted bugs and cached model responses. Always dry-run — nothing is written to GitHub.',
+      );
+    } catch (err) {
+      setBootError(err);
+    } finally {
+      setDemoBusy(false);
+    }
+  }
+
+  function exitDemo() {
+    setDemoMode(false);
+    setScan(null);
+    setRepo(null);
+    setFinding(null);
+    setPendingFix(null);
+    setView(session?.connected ? 'repos' : 'connect');
+    setNotice('Demo Mode off. Your scan history for this session is still under History.');
+  }
+
   function goHome() {
-    setView(session?.connected ? (repo ? 'scan' : 'repos') : 'connect');
+    if (view === 'history') {
+      setView(demoMode ? 'board' : session?.connected ? (repo ? 'scan' : 'repos') : 'connect');
+      return;
+    }
+    setView(demoMode ? 'board' : session?.connected ? (repo ? 'scan' : 'repos') : 'connect');
   }
 
   function handleRepo(repoSummary: RepoSummary) {
@@ -102,12 +150,22 @@ export default function App() {
   }
 
   const connected = Boolean(session?.connected);
+  const workspace = connected || demoMode;
+
+  // A finding is "banished" once a PR (or dry-run) was approved for it.
+  const banished = useMemo(
+    () => new Set((session?.history ?? []).map((entry) => entry.findingId)),
+    [session],
+  );
 
   return (
     <>
       <Header
         session={session}
+        demoMode={demoMode}
+        demoBusy={demoBusy}
         onToggleDryRun={toggleDryRun}
+        onToggleDemo={() => (demoMode ? exitDemo() : void enterDemo())}
         onGoHistory={() => setView('history')}
         onGoHome={goHome}
       />
@@ -127,7 +185,10 @@ export default function App() {
             <ErrorBanner
               error={bootError}
               title="Something went wrong"
-              onRetry={() => window.location.reload()}
+              onRetry={() => {
+                setBootError(null);
+                window.location.reload();
+              }}
             />
           </div>
         ) : null}
@@ -148,19 +209,33 @@ export default function App() {
           </div>
         ) : null}
 
-        {!booting && !connected && view !== 'history' ? (
+        {!booting && demoMode ? (
+          <div className="demo-banner" style={{ marginBottom: '1rem' }}>
+            <span aria-hidden="true">👻</span>
+            <span>
+              <strong>Demo Mode</strong> · bundled sample repo · cached model responses · always dry-run · no
+              internet needed
+            </span>
+            <button type="button" className="btn btn--small" onClick={exitDemo}>
+              Exit demo
+            </button>
+          </div>
+        ) : null}
+
+        {!booting && !workspace && view !== 'history' ? (
           <>
             <section className="hero">
               <div>
                 <p className="eyebrow">AI for open source · human in the loop</p>
                 <h1>
-                  Banish bugs.<br />
+                  Banish bugs.
+                  <br />
                   <span className="glow-blood">Keep the humans in charge.</span>
                 </h1>
                 <p>
                   BugBanisher reads one of your repositories, explains each bug in plain English, drafts a
-                  minimal fix, and opens a pull request <strong>only after you approve it</strong>. Dry-run
-                  is on by default, and nothing is ever merged automatically.
+                  minimal fix, and opens a pull request <strong>only after you approve it</strong>. Dry-run is
+                  on by default, and nothing is ever merged automatically.
                 </p>
                 <div className="row">
                   <span className="badge badge--ghost">open-weight model</span>
@@ -177,11 +252,13 @@ export default function App() {
             <ConnectPanel
               oauthAvailable={session?.oauthAvailable ?? false}
               onConnected={handleConnected}
+              onStartDemo={() => void enterDemo()}
+              demoBusy={demoBusy}
             />
           </>
         ) : null}
 
-        {!booting && connected && view === 'repos' ? (
+        {!booting && connected && !demoMode && view === 'repos' ? (
           <RepoPicker
             login={session?.user?.login ?? ''}
             onPick={handleRepo}
@@ -189,7 +266,7 @@ export default function App() {
           />
         ) : null}
 
-        {!booting && connected && view === 'scan' && repo && session ? (
+        {!booting && connected && !demoMode && view === 'scan' && repo && session ? (
           <ScanPanel
             repo={repo}
             dryRun={session.dryRun}
@@ -202,11 +279,13 @@ export default function App() {
           />
         ) : null}
 
-        {!booting && connected && view === 'board' && scan ? (
+        {!booting && workspace && view === 'board' && scan ? (
           <BugBoard
             scan={scan}
-            onBack={() => setView('scan')}
-            onRescan={() => setView('scan')}
+            banished={banished}
+            backLabel={demoMode ? 'Exit demo' : undefined}
+            onBack={() => (demoMode ? exitDemo() : setView('scan'))}
+            onRescan={() => (demoMode ? void enterDemo() : setView('scan'))}
             onPickFix={(picked) => {
               setFinding(picked);
               setView('fix');
@@ -214,17 +293,15 @@ export default function App() {
           />
         ) : null}
 
-        {!booting && connected && view === 'fix' && scan && finding ? (
+        {!booting && workspace && view === 'fix' && scan && finding ? (
           <FixPanel
             scan={scan}
             finding={finding}
-            dryRun={session?.dryRun ?? true}
+            dryRun={demoMode ? true : session?.dryRun ?? true}
             approvals={session?.approvals ?? 0}
             approvalCap={session?.approvalCap ?? 3}
             onBack={() => setView('board')}
-            onApprove={(fix: FixResult) => {
-              setNotice(`Patch ${fix.fixId} is verified. The approval step arrives in the next phase.`);
-            }}
+            onApprove={(fix: FixResult) => setPendingFix(fix)}
           />
         ) : null}
 
@@ -238,6 +315,24 @@ export default function App() {
           />
         ) : null}
       </main>
+
+      {pendingFix && scan ? (
+        <ApproveModal
+          fix={pendingFix}
+          scan={scan}
+          dryRun={demoMode ? true : session?.dryRun ?? true}
+          approvals={session?.approvals ?? 0}
+          approvalCap={session?.approvalCap ?? 3}
+          onClose={() => setPendingFix(null)}
+          onApproved={({ record, session: updated, note }) => {
+            setSession(updated);
+            const base = record.dryRun
+              ? `Dry run recorded for "${record.title}". Nothing was written to GitHub.`
+              : `Pull request #${record.number} opened on ${record.repoFullName}. BugBanisher will never merge it.`;
+            setNotice(note && !record.dryRun ? `${base} ${note}` : base);
+          }}
+        />
+      ) : null}
 
       <footer className="page" style={{ paddingTop: 0 }}>
         <p className="tiny dim">

@@ -26,7 +26,7 @@ import { log, redact } from '../logger.js';
 import { redactSecrets } from '../redaction.js';
 import { getRepoTree, getFile, listBugIssues } from '../github/client.js';
 import type { JobContext } from '../jobs.js';
-import { getLLMProvider } from '../llm/index.js';
+import { checkLLMProvider, getLLMProvider } from '../llm/index.js';
 import { reviewFilesWithLLM } from '../llm/findings.js';
 import { classifyPath, languageOf, looksLikeSecretContent, isProbablyBinary } from './fileFilter.js';
 import { runStaticRules } from './staticRules.js';
@@ -176,9 +176,8 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
   // Rank, then bound the scan. This keeps the scan fast and the demo predictable.
   const ranked = [...candidates].sort((a, b) => filePriority(b) - filePriority(a));
   const selectedPaths = ranked.slice(0, config.scan.maxFiles);
-  for (const unused of ranked.slice(config.scan.maxFiles)) {
+  for (let index = config.scan.maxFiles; index < ranked.length; index += 1) {
     skip('scan limit reached');
-    void unused;
   }
   if (ranked.length > selectedPaths.length) {
     notes.push(
@@ -325,16 +324,21 @@ export async function runScan(input: ScanInput, ctx: JobContext, signal?: AbortS
   if (provider === null) {
     notes.push('Model review skipped: LLM_PROVIDER=none. Static checks and issues were still scanned.');
   } else if (mode === 'github') {
-    try {
-      const result = await reviewFilesWithLLM(provider, repo.fullName, scanForLLM, signal);
-      llmFindings = result.findings;
-      modelUsed = result.filesReviewed > 0 ? result.model : null;
-      notes.push(...result.notes);
-      if (result.filesReviewed === 0 && result.notes.length === 0) {
-        notes.push('The model reviewed no files (nothing suspicious enough or nothing supported).');
+    const health = await checkLLMProvider(provider);
+    if (!health.ok) {
+      notes.push(`Model review skipped: ${health.detail} Static checks and issues were still scanned.`);
+    } else {
+      try {
+        const result = await reviewFilesWithLLM(provider, repo.fullName, scanForLLM, signal);
+        llmFindings = result.findings;
+        modelUsed = result.filesReviewed > 0 ? result.model : null;
+        notes.push(...result.notes);
+        if (result.filesReviewed === 0 && result.notes.length === 0) {
+          notes.push('The model reviewed no files (nothing suspicious enough or nothing supported).');
+        }
+      } catch (error) {
+        notes.push(`Model review failed: ${error instanceof Error ? error.message : 'unknown error'}`);
       }
-    } catch (error) {
-      notes.push(`Model review failed: ${error instanceof Error ? error.message : 'unknown error'}`);
     }
   }
 
